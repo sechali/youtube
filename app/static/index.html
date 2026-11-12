@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Media Downloader — Video & Audio MP3</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div>
+        <h1>Media Downloader</h1>
+        <p class="subtitle">Unduh video & ekstrak audio MP3 dari YouTube, Facebook, Instagram, Threads, TikTok, dan lainnya.</p>
+      </div>
+      <div class="badges">
+        <span class="badge">YouTube</span>
+        <span class="badge">Facebook</span>
+        <span class="badge">Instagram</span>
+        <span class="badge">Threads</span>
+        <span class="badge">Playlist</span>
+      </div>
+    </header>
+
+    <main class="card">
+      <div class="url-row">
+        <input
+          type="url"
+          id="url-input"
+          placeholder="Tempel link video atau playlist di sini (https://...)"
+          required
+        />
+        <button type="button" id="inspect-btn" class="btn btn-secondary">Cek Info</button>
+      </div>
+
+      <div id="inspect-progress" class="progress-box hidden">
+        <div class="progress-header">
+          <span>Mengambil metadata media...</span>
+          <span class="muted-text">Mohon tunggu</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill indeterminate"></div>
+        </div>
+      </div>
+
+      <div id="preview-card" class="preview hidden">
+        <img id="preview-thumb" src="" alt="Thumbnail" />
+        <div class="preview-info">
+          <div class="preview-meta">
+            <span id="preview-platform" class="pill">Web</span>
+            <span id="preview-duration" class="pill muted">-</span>
+            <span id="preview-playlist-badge" class="pill accent hidden">Playlist</span>
+          </div>
+          <h2 id="preview-title">-</h2>
+          <p id="preview-uploader" class="muted-text">-</p>
+        </div>
+      </div>
+
+      <div id="playlist-selector-card" class="playlist-selector-box hidden">
+        <div class="playlist-selector-header">
+          <div>
+            <h3>Daftar Video Playlist</h3>
+            <p class="muted-text" id="playlist-selector-summary">Pilih video yang ingin diunduh:</p>
+          </div>
+          <div class="playlist-selector-buttons">
+            <button type="button" id="select-all-playlist-btn" class="btn btn-secondary btn-sm">Pilih Semua</button>
+            <button type="button" id="deselect-all-playlist-btn" class="btn btn-secondary btn-sm">Batal Pilih</button>
+          </div>
+        </div>
+        <div id="playlist-items-container" class="playlist-items-list"></div>
+      </div>
+
+      <div class="folder-row">
+        <label for="folder-input">Folder Penyimpanan</label>
+        <div class="folder-controls">
+          <input type="text" id="folder-input" placeholder="Memuat folder penyimpanan..." />
+          <button type="button" id="pick-folder-btn" class="btn btn-secondary">Pilih Folder</button>
+        </div>
+      </div>
+
+      <div class="folder-row">
+        <label for="cookie-mode">Autentikasi / Cookies (atasi error "Sign in to confirm you're not a bot")</label>
+        <div class="folder-controls">
+          <select id="cookie-mode" style="padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);">
+            <option value="none">Tidak pakai cookies</option>
+            <option value="browser">Ambil dari Browser</option>
+            <option value="file">Gunakan file cookies.txt</option>
+          </select>
+          <select id="cookie-browser" class="hidden" style="padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);">
+            <option value="chrome">Google Chrome</option>
+            <option value="edge">Microsoft Edge</option>
+            <option value="firefox">Mozilla Firefox</option>
+            <option value="brave">Brave</option>
+            <option value="opera">Opera</option>
+          </select>
+          <input type="text" id="cookie-file-input" class="hidden" placeholder="Path ke cookies.txt..." />
+          <button type="button" id="pick-cookies-btn" class="btn btn-secondary hidden">Pilih cookies.txt</button>
+        </div>
+      </div>
+
+      <section class="options-grid">
+        <div class="field">
+          <label for="format-select">Format Output</label>
+          <select id="format-select">
+            <option value="video">Video (MP4)</option>
+            <option value="audio">Audio (MP3)</option>
+          </select>
+        </div>
+
+        <div class="field" id="resolution-field">
+          <label for="resolution-select">Resolusi Video</label>
+          <select id="resolution-select">
+            <option value="best">Terbaik (Best)</option>
+            <option value="1080">1080p (Full HD)</option>
+            <option value="720">720p (HD)</option>
+            <option value="480">480p</option>
+            <option value="360">360p</option>
+          </select>
+        </div>
+
+        <div class="field hidden" id="audio-quality-field">
+          <label for="audio-quality-select">Kualitas Audio MP3</label>
+          <select id="audio-quality-select">
+            <option value="320">320 kbps (Tinggi)</option>
+            <option value="192" selected>192 kbps (Standar)</option>
+            <option value="128">128 kbps (Ringan)</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label class="checkbox-label">
+            <input type="checkbox" id="playlist-checkbox" />
+            <span>Download sebagai Playlist (.zip)</span>
+          </label>
+          <input
+            type="text"
+            id="playlist-items"
+            class="hidden"
+            placeholder="Rentang item (opsional, mis. 1-5 atau 1,3,5)"
+          />
+        </div>
+      </section>
+
+      <div class="download-action-bar">
+        <button type="button" id="download-btn" class="btn btn-primary btn-large">Mulai Download</button>
+      </div>
+
+      <section id="progress-box" class="progress-box hidden">
+        <div class="progress-header">
+          <span id="progress-status">Menyiapkan...</span>
+          <span id="progress-pct">0%</span>
+        </div>
+        <div class="progress-track">
+          <div id="progress-bar" class="progress-fill"></div>
+        </div>
+        <div class="progress-footer">
+          <span id="progress-meta">Kecepatan: - | ETA: -</span>
+          <div class="progress-actions">
+            <button type="button" id="stop-btn" class="btn btn-danger btn-sm hidden">Stop</button>
+            <button type="button" id="resume-btn" class="btn btn-primary btn-sm hidden">Resume</button>
+            <a id="save-file-link" class="btn btn-success btn-sm hidden" href="#" download>Simpan File</a>
+          </div>
+        </div>
+      </section>
+
+      <div id="error-box" class="alert-error hidden"></div>
+    </main>
+
+    <section id="queue-card" class="card hidden">
+      <div class="history-header">
+        <h2>Daftar Antrian &amp; Proses Unduhan</h2>
+      </div>
+      <div id="queue-list" class="queue-list"></div>
+    </section>
+
+    <section class="card history-card">
+      <div class="history-header">
+        <h2>Riwayat Unduhan</h2>
+        <div class="history-actions">
+          <button type="button" id="refresh-history-btn" class="btn btn-secondary btn-sm">Refresh</button>
+          <button type="button" id="clear-history-btn" class="btn btn-danger btn-sm">Hapus Semua</button>
+        </div>
+      </div>
+
+      <div id="history-empty" class="empty-state">Belum ada riwayat unduhan.</div>
+      <div class="table-wrap">
+        <table id="history-table" class="hidden">
+          <thead>
+            <tr>
+              <th>Judul</th>
+              <th>Platform</th>
+              <th>Format</th>
+              <th>Ukuran</th>
+              <th>Status</th>
+              <th>Waktu</th>
+              <th>Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="history-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
