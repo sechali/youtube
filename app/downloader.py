@@ -326,7 +326,7 @@ def inspect_url(url: str) -> dict[str, Any]:
     parsed = urllib.parse.urlparse(url)
     qs = urllib.parse.parse_qs(parsed.query)
     single_video_id = qs.get("v", [None])[0]
-    is_mix_or_list = bool(single_video_id and "list" in qs)
+    has_playlist_param = bool(single_video_id and "list" in qs)
     clean_single_url = f"https://www.youtube.com/watch?v={single_video_id}" if single_video_id else url
 
     ydl_opts = {
@@ -339,8 +339,10 @@ def inspect_url(url: str) -> dict[str, Any]:
     }
     _apply_cookie_opts(ydl_opts)
 
+    # Jika URL membawa single video (v=...), utamakan inspeksi video tersebut agar instan & tidak terbebani ratusan item Mix
+    target_inspect_url = clean_single_url if single_video_id else url
+
     info = None
-    target_inspect_url = url
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(target_inspect_url, download=False)
@@ -372,7 +374,7 @@ def inspect_url(url: str) -> dict[str, Any]:
     if not info:
         raise ValueError("Tidak dapat mengambil informasi dari URL tersebut.")
 
-    is_playlist = info.get("_type") == "playlist" or "entries" in info
+    is_playlist = (info.get("_type") == "playlist" or "entries" in info) and not single_video_id
     entries = list(info.get("entries") or []) if is_playlist else []
 
     playlist_videos = []
@@ -410,7 +412,7 @@ def inspect_url(url: str) -> dict[str, Any]:
                 "title": info.get("title") or "Video",
                 "duration": _format_duration(info.get("duration")),
                 "thumbnail": thumbnail,
-                "url": url,
+                "url": clean_single_url,
             }
         )
 
@@ -429,7 +431,9 @@ def inspect_url(url: str) -> dict[str, Any]:
         subtitles_available = sorted(list(set(list(raw_subs.keys()) + list(raw_auto.keys()))))
 
     return {
-        "url": url,
+        "url": clean_single_url if single_video_id else url,
+        "original_url": url,
+        "has_playlist_param": has_playlist_param,
         "title": info.get("title") or "Tanpa Judul",
         "platform": info.get("extractor_key") or info.get("extractor") or "Web",
         "uploader": info.get("uploader") or info.get("channel") or "-",
@@ -571,6 +575,9 @@ def start_download(
     base_dir = Path(output_dir).resolve() if output_dir else get_download_dir()
     base_dir.mkdir(parents=True, exist_ok=True)
 
+    # Bersihkan URL jika bukan download playlist agar tidak terbebani ratusan item YouTube Mix
+    clean_target_url = clean_media_url(url, as_playlist=download_playlist)
+
     task_dir = resume_task_dir
     if download_playlist and not task_dir:
         task_dir = str(base_dir / f"playlist_{task_id}")
@@ -581,7 +588,7 @@ def start_download(
         _TASKS[task_id] = {
             "task_id": task_id,
             "batch_id": batch_id,
-            "url": url,
+            "url": clean_target_url,
             "status": "queued",
             "status_text": "Menunggu antrian...",
             "progress": 0.0,
@@ -615,7 +622,7 @@ def start_download(
         target=_worker_wrapper,
         args=(
             task_id,
-            url,
+            clean_target_url,
             format_type,
             resolution,
             audio_quality,
@@ -868,6 +875,12 @@ def _run_download(
         "noplaylist": not download_playlist,
         "continuedl": True,
         "nopart": False,
+        "socket_timeout": 60,
+        "retries": 15,
+        "fragment_retries": 15,
+        "file_access_retries": 5,
+        "extractor_retries": 5,
+        "ignoreerrors": "only_download" if download_playlist else False,
         "outtmpl": str(target_dir / "%(title).80s [%(id)s].%(ext)s"),
         "windowsfilenames": True,
         "progress_hooks": [progress_hook],
@@ -931,6 +944,9 @@ def _run_download(
             "extract_flat": "in_playlist",
             "skip_download": True,
             "noplaylist": not download_playlist,
+            "socket_timeout": 30,
+            "retries": 5,
+            "ignoreerrors": True,
         }
         if download_playlist and playlist_items:
             pre_opts["playlist_items"] = playlist_items.strip()
@@ -1092,7 +1108,13 @@ def _run_download(
         )
     except Exception as exc:
         raw_err = str(exc)
-        if "bot" in raw_err.lower() or "sign in" in raw_err.lower():
+        if "10054" in raw_err or "forcibly closed" in raw_err.lower():
+            err_msg = "Koneksi terputus dari YouTube (WinError 10054). YouTube memutus koneksi saat mengunduh batch/playlist besar. Disarankan mengunduh video satu per satu atau membatasi rentang playlist (misal: 1-5)."
+        elif "timed out" in raw_err.lower():
+            err_msg = "Waktu koneksi habis (Timeout). Koneksi internet lambat atau terputus saat mengunduh dari server YouTube."
+        elif "not available" in raw_err.lower():
+            err_msg = "Video tidak tersedia atau telah dihapus oleh pengunggah di YouTube."
+        elif "bot" in raw_err.lower() or "sign in" in raw_err.lower():
             err_msg = "Akses diblokir (Sign in / Bot check). Aktifkan Cookies Browser di menu Pengaturan."
         elif "private" in raw_err.lower():
             err_msg = "Konten bersifat privat atau memerlukan autentikasi login."

@@ -185,6 +185,14 @@ document.addEventListener("DOMContentLoaded", () => {
         playlistCheckbox.checked = true;
         playlistItemsInput.classList.remove("hidden");
         renderPlaylistSelector(data.playlist_videos || []);
+      } else if (data.has_playlist_param) {
+        // Link single video yang membawa parameter playlist/mix (&list=RD...)
+        previewPlaylistBadge.textContent = "Mix / Radio Terdeteksi";
+        previewPlaylistBadge.classList.remove("hidden");
+        playlistCheckbox.checked = false; // Tetap unchecked agar mengunduh single video
+        playlistItemsInput.classList.add("hidden");
+        if (data.url) urlInput.value = data.url; // Gunakan link bersih
+        showToast("Mode Single Video aktif. Centang opsi 'Unduh sebagai Playlist' jika ingin mengunduh seluruh isi Mix.", "info");
       } else {
         previewPlaylistBadge.classList.add("hidden");
         playlistCheckbox.checked = false;
