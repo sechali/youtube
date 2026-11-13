@@ -180,23 +180,17 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       if (data.is_playlist) {
-        previewPlaylistBadge.textContent = `Playlist (${data.playlist_count} item)`;
+        previewPlaylistBadge.textContent = `Playlist (${data.playlist_count} video)`;
         previewPlaylistBadge.classList.remove("hidden");
         playlistCheckbox.checked = true;
         playlistItemsInput.classList.remove("hidden");
         renderPlaylistSelector(data.playlist_videos || []);
-      } else if (data.has_playlist_param) {
-        // Link single video yang membawa parameter playlist/mix (&list=RD...)
-        previewPlaylistBadge.textContent = "Mix / Radio Terdeteksi";
-        previewPlaylistBadge.classList.remove("hidden");
-        playlistCheckbox.checked = false; // Tetap unchecked agar mengunduh single video
-        playlistItemsInput.classList.add("hidden");
-        if (data.url) urlInput.value = data.url; // Gunakan link bersih
-        showToast("Mode Single Video aktif. Centang opsi 'Unduh sebagai Playlist' jika ingin mengunduh seluruh isi Mix.", "info");
+        showToast(`Playlist terdeteksi (${data.playlist_count} video). Silakan pilih video yang ingin diunduh.`, "info");
       } else {
         previewPlaylistBadge.classList.add("hidden");
         playlistCheckbox.checked = false;
         playlistItemsInput.classList.add("hidden");
+        renderPlaylistSelector([]);
       }
 
       if (data.subtitles_available && data.subtitles_available.length > 0) {

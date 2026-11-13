@@ -322,30 +322,28 @@ def inspect_url(url: str) -> dict[str, Any]:
     """Extract metadata, formats, and available resolutions without downloading."""
     _ensure_ffmpeg_path()
 
-    # Cek apakah URL adalah single video yang membawa parameter playlist/mix (&list=RD...)
     parsed = urllib.parse.urlparse(url)
     qs = urllib.parse.parse_qs(parsed.query)
     single_video_id = qs.get("v", [None])[0]
-    has_playlist_param = bool(single_video_id and "list" in qs)
+    has_playlist_param = "list" in qs
     clean_single_url = f"https://www.youtube.com/watch?v={single_video_id}" if single_video_id else url
 
     ydl_opts = {
         "quiet": True,
         "no_warnings": True,
         "extract_flat": "in_playlist",
+        "playlistend": 50,  # Batasi inspeksi maksimal 50 video agar instan & tidak freeze di YouTube Mix
         "skip_download": True,
         "socket_timeout": 30,
         "retries": 5,
+        "ignoreerrors": True,
     }
     _apply_cookie_opts(ydl_opts)
-
-    # Jika URL membawa single video (v=...), utamakan inspeksi video tersebut agar instan & tidak terbebani ratusan item Mix
-    target_inspect_url = clean_single_url if single_video_id else url
 
     info = None
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(target_inspect_url, download=False)
+            info = ydl.extract_info(url, download=False)
     except Exception as exc:
         msg = str(exc)
         # Jika browser sedang terbuka dan mengunci database cookies, coba fallback tanpa cookies
@@ -354,7 +352,7 @@ def inspect_url(url: str) -> dict[str, Any]:
             fallback_opts.pop("cookiesfrombrowser", None)
             try:
                 with yt_dlp.YoutubeDL(fallback_opts) as ydl:
-                    info = ydl.extract_info(target_inspect_url, download=False)
+                    info = ydl.extract_info(url, download=False)
             except Exception as inner_exc:
                 inner_msg = str(inner_exc)
                 if "bot" in inner_msg.lower() or "sign in" in inner_msg.lower() or "private" in inner_msg.lower():
@@ -374,13 +372,13 @@ def inspect_url(url: str) -> dict[str, Any]:
     if not info:
         raise ValueError("Tidak dapat mengambil informasi dari URL tersebut.")
 
-    is_playlist = (info.get("_type") == "playlist" or "entries" in info) and not single_video_id
+    is_playlist = info.get("_type") == "playlist" or "entries" in info or has_playlist_param
     entries = list(info.get("entries") or []) if is_playlist else []
 
     playlist_videos = []
     thumbnail = info.get("thumbnail")
 
-    if is_playlist:
+    if is_playlist and entries:
         for idx, entry in enumerate(entries, 1):
             if not entry:
                 continue
@@ -405,6 +403,7 @@ def inspect_url(url: str) -> dict[str, Any]:
             thumbs = first.get("thumbnails") or []
             thumbnail = first.get("thumbnail") or (thumbs[-1].get("url") if thumbs else None)
     else:
+        is_playlist = False
         playlist_videos.append(
             {
                 "index": 1,
@@ -412,7 +411,7 @@ def inspect_url(url: str) -> dict[str, Any]:
                 "title": info.get("title") or "Video",
                 "duration": _format_duration(info.get("duration")),
                 "thumbnail": thumbnail,
-                "url": clean_single_url,
+                "url": url,
             }
         )
 
@@ -429,12 +428,14 @@ def inspect_url(url: str) -> dict[str, Any]:
         raw_subs = info.get("subtitles") or {}
         raw_auto = info.get("automatic_captions") or {}
         subtitles_available = sorted(list(set(list(raw_subs.keys()) + list(raw_auto.keys()))))
+    else:
+        resolutions = [1080, 720, 480, 360]
 
     return {
-        "url": clean_single_url if single_video_id else url,
-        "original_url": url,
-        "has_playlist_param": has_playlist_param,
-        "title": info.get("title") or "Tanpa Judul",
+        "url": url,
+        "clean_single_url": clean_single_url,
+        "has_single_video": bool(single_video_id),
+        "title": info.get("title") or (entries[0].get("title") if entries else "Playlist"),
         "platform": info.get("extractor_key") or info.get("extractor") or "Web",
         "uploader": info.get("uploader") or info.get("channel") or "-",
         "duration": _format_duration(info.get("duration")),
