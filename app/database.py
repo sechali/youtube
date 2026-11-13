@@ -2,11 +2,18 @@
 
 from __future__ import annotations
 
+import os
 import sqlite3
 from pathlib import Path
 from typing import Any
 
-DB_PATH = Path(__file__).resolve().parent.parent / "history.db"
+# Lokasi database: gunakan folder internal Android jika berjalan di Android
+_android_internal = os.environ.get("ANDROID_INTERNAL_DIR")
+if _android_internal:
+    DB_PATH = Path(_android_internal) / "history.db"
+else:
+    DB_PATH = Path(__file__).resolve().parent.parent / "history.db"
+
 
 
 def get_connection() -> sqlite3.Connection:

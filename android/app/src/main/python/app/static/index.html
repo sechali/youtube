@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Media Downloader Pro — Video & Audio HD</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="app-layout">
+    <!-- TOP HEADER -->
+    <header class="app-header">
+      <div class="brand">
+        <div class="brand-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22 15V9a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v6a4 4 0 0 0 4 4h12a4 4 0 0 0 4-4Z"/>
+            <polygon points="10 8 16 12 10 16 10 8" fill="currentColor"/>
+          </svg>
+        </div>
+        <div>
+          <h1>Media Downloader <span class="pro-badge">PRO</span></h1>
+          <p class="brand-subtitle">Fast Video, Audio & Playlist Downloader</p>
+        </div>
+      </div>
+
+      <div class="header-right">
+        <div class="system-pills">
+          <span id="ffmpeg-badge" class="badge badge-success" title="Status FFmpeg">FFmpeg: Memeriksa...</span>
+          <span id="disk-badge" class="badge badge-neutral" title="Sisa Ruang Harddisk">Sisa: -</span>
+        </div>
+        <button type="button" id="theme-toggle-btn" class="icon-btn" title="Ganti Tema (Dark/Light)" aria-label="Toggle Theme">
+          <svg id="theme-icon-sun" class="hidden" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+          <svg id="theme-icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- NAVIGATION TABS -->
+    <nav class="nav-tabs">
+      <button type="button" class="tab-btn active" data-tab="single-tab">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Single Link</span>
+      </button>
+      <button type="button" class="tab-btn" data-tab="batch-tab">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+        <span>Batch / Multi-Link</span>
+      </button>
+      <button type="button" class="tab-btn" data-tab="queue-tab">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        <span>Antrian Aktif</span>
+        <span id="active-queue-count" class="tab-badge hidden">0</span>
+      </button>
+      <button type="button" class="tab-btn" data-tab="history-tab">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span>Riwayat Unduhan</span>
+      </button>
+      <button type="button" class="tab-btn" data-tab="settings-tab">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <span>Pengaturan &amp; Info</span>
+      </button>
+    </nav>
+
+    <!-- MAIN CONTENT CONTAINERS -->
+    <main class="main-content">
+
+      <!-- TAB 1: SINGLE DOWNLOAD -->
+      <section id="single-tab" class="tab-pane active">
+        <div class="card">
+          <div class="card-title-row">
+            <h2>Unduh Video &amp; Audio</h2>
+            <div class="platform-tags">
+              <span>YouTube</span>
+              <span>TikTok</span>
+              <span>Instagram</span>
+              <span>Facebook</span>
+              <span>Twitter / X</span>
+            </div>
+          </div>
+
+          <div class="url-input-container">
+            <div class="input-with-icon">
+              <svg class="input-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+              <input type="url" id="url-input" placeholder="Tempel URL video atau playlist di sini (misal https://www.youtube.com/...)" />
+              <button type="button" id="paste-btn" class="paste-badge-btn" title="Tempel dari Clipboard">Paste</button>
+            </div>
+            <button type="button" id="inspect-btn" class="btn btn-secondary">Cek Info</button>
+          </div>
+
+          <!-- Indeterminate Inspect Loading -->
+          <div id="inspect-progress" class="inspect-loader hidden">
+            <div class="spinner"></div>
+            <span>Mengambil metadata &amp; format yang tersedia...</span>
+          </div>
+
+          <!-- Video Preview Card -->
+          <div id="preview-card" class="preview-box hidden">
+            <div class="preview-thumbnail-wrap">
+              <img id="preview-thumb" src="" alt="Thumbnail" />
+              <span id="preview-duration" class="thumb-duration">-</span>
+            </div>
+            <div class="preview-details">
+              <div class="preview-tags">
+                <span id="preview-platform" class="tag-pill tag-platform">YouTube</span>
+                <span id="preview-playlist-badge" class="tag-pill tag-playlist hidden">Playlist</span>
+              </div>
+              <h3 id="preview-title" class="preview-title">-</h3>
+              <p id="preview-uploader" class="preview-uploader">-</p>
+              <div id="subtitles-info-badge" class="subtitles-found-text hidden">Subtitle terdeteksi</div>
+            </div>
+          </div>
+
+          <!-- Playlist Items Selector -->
+          <div id="playlist-selector-card" class="playlist-box hidden">
+            <div class="playlist-box-header">
+              <div>
+                <h4>Daftar Video Playlist</h4>
+                <p class="muted-text" id="playlist-selector-summary">Pilih video yang ingin diunduh:</p>
+              </div>
+              <div class="playlist-quick-actions">
+                <button type="button" id="select-all-playlist-btn" class="btn btn-sm btn-outline">Pilih Semua</button>
+                <button type="button" id="deselect-all-playlist-btn" class="btn btn-sm btn-outline">Batal Pilih</button>
+              </div>
+            </div>
+            <div id="playlist-items-container" class="playlist-list-scroll"></div>
+          </div>
+
+          <!-- Download Options Grid -->
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="format-select">Tipe Format</label>
+              <select id="format-select">
+                <option value="video">Video (MP4 / MKV / WebM)</option>
+                <option value="audio">Audio Ekstrak (MP3 / M4A / FLAC / WAV)</option>
+              </select>
+            </div>
+
+            <!-- Video Options -->
+            <div class="form-group" id="video-ext-field">
+              <label for="video-ext-select">Format Kontainer Video</label>
+              <select id="video-ext-select">
+                <option value="mp4" selected>MP4 (Paling Kompatibel)</option>
+                <option value="mkv">MKV (Mendukung Multi-Subtitle)</option>
+                <option value="webm">WebM</option>
+              </select>
+            </div>
+
+            <div class="form-group" id="resolution-field">
+              <label for="resolution-select">Resolusi Video</label>
+              <select id="resolution-select">
+                <option value="best" selected>Resolusi Tertinggi (Best)</option>
+                <option value="2160">4K (2160p)</option>
+                <option value="1440">2K (1440p)</option>
+                <option value="1080">1080p (Full HD)</option>
+                <option value="720">720p (HD)</option>
+                <option value="480">480p</option>
+                <option value="360">360p</option>
+              </select>
+            </div>
+
+            <!-- Audio Options -->
+            <div class="form-group hidden" id="audio-format-field">
+              <label for="audio-format-select">Format Ekstensi Audio</label>
+              <select id="audio-format-select">
+                <option value="mp3" selected>MP3 (Universal)</option>
+                <option value="m4a">M4A (Kualitas Tinggi AAC)</option>
+                <option value="flac">FLAC (Lossless)</option>
+                <option value="wav">WAV (Uncompressed)</option>
+                <option value="aac">AAC</option>
+                <option value="opus">OPUS</option>
+              </select>
+            </div>
+
+            <div class="form-group hidden" id="audio-quality-field">
+              <label for="audio-quality-select">Bitrate / Kualitas Audio</label>
+              <select id="audio-quality-select">
+                <option value="320">320 kbps (Sangat Jernih)</option>
+                <option value="256">256 kbps</option>
+                <option value="192" selected>192 kbps (Standar CD)</option>
+                <option value="128">128 kbps (Hemat Ruang)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Subtitle / Caption Settings -->
+          <div class="advanced-section">
+            <details>
+              <summary>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                Opsi Subtitle / Caption &amp; Playlist
+              </summary>
+              <div class="advanced-panel">
+                <label class="custom-checkbox">
+                  <input type="checkbox" id="subtitle-checkbox" />
+                  <span>Unduh Subtitle / Caption Video</span>
+                </label>
+                <div id="subtitle-options-box" class="sub-form-row hidden">
+                  <div class="form-group">
+                    <label for="subtitle-lang-input">Bahasa Subtitle (Kode ISO)</label>
+                    <input type="text" id="subtitle-lang-input" value="id,en" placeholder="misal: id,en atau all" />
+                    <small class="muted-text">Gunakan <code>id,en</code> untuk Indonesia &amp; Inggris, atau <code>all</code> untuk semua.</small>
+                  </div>
+                  <label class="custom-checkbox" id="embed-sub-label">
+                    <input type="checkbox" id="embed-subtitle-checkbox" />
+                    <span>Gabungkan (Embed) subtitle langsung ke dalam video</span>
+                  </label>
+                </div>
+
+                <div class="mt-3">
+                  <label class="custom-checkbox">
+                    <input type="checkbox" id="playlist-checkbox" />
+                    <span>Unduh sebagai Playlist (.zip)</span>
+                  </label>
+                  <input type="text" id="playlist-items" class="form-control hidden mt-2" placeholder="Rentang nomor item (misal: 1-5 atau 1,3,7)" />
+                </div>
+              </div>
+            </details>
+          </div>
+
+          <div class="action-btn-row">
+            <button type="button" id="download-btn" class="btn btn-primary btn-lg">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span>Mulai Download</span>
+            </button>
+          </div>
+
+          <!-- Quick Single Progress Box -->
+          <div id="single-progress-box" class="progress-card hidden">
+            <div class="progress-card-header">
+              <div>
+                <span id="single-progress-title" class="progress-title">Mengunduh...</span>
+                <span id="single-progress-status" class="progress-sub">Menyiapkan...</span>
+              </div>
+              <span id="single-progress-pct" class="progress-number">0%</span>
+            </div>
+            <div class="progress-track">
+              <div id="single-progress-bar" class="progress-fill"></div>
+            </div>
+            <div class="progress-card-footer">
+              <span id="single-progress-meta">Kecepatan: - | ETA: -</span>
+              <div class="progress-card-btns">
+                <button type="button" id="single-stop-btn" class="btn btn-sm btn-danger hidden">Stop</button>
+                <button type="button" id="single-resume-btn" class="btn btn-sm btn-secondary hidden">Resume</button>
+                <button type="button" id="single-open-btn" class="btn btn-sm btn-success hidden">Buka di Folder</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: BATCH / MULTI-LINK DOWNLOADER -->
+      <section id="batch-tab" class="tab-pane">
+        <div class="card">
+          <div class="card-title-row">
+            <h2>Batch / Multi-Link Downloader</h2>
+            <p class="muted-text">Tempel banyak link sekaligus (satu baris per link). Antrian unduhan otomatis diproses berurutan.</p>
+          </div>
+
+          <div class="batch-textarea-wrap">
+            <textarea id="batch-urls-input" rows="7" placeholder="https://www.youtube.com/watch?v=...&#10;https://www.tiktok.com/@user/video/...&#10;https://www.instagram.com/reel/..."></textarea>
+            <div class="batch-counter">
+              <span id="batch-count-display">0 link terdeteksi</span>
+              <button type="button" id="batch-clear-btn" class="btn btn-sm btn-outline">Kosongkan</button>
+            </div>
+          </div>
+
+          <!-- Batch Options Grid -->
+          <div class="form-grid mt-3">
+            <div class="form-group">
+              <label for="batch-format-select">Format Target</label>
+              <select id="batch-format-select">
+                <option value="video">Video (MP4)</option>
+                <option value="audio">Audio Ekstrak (MP3)</option>
+              </select>
+            </div>
+            <div class="form-group" id="batch-resolution-group">
+              <label for="batch-resolution-select">Resolusi Video Maksimal</label>
+              <select id="batch-resolution-select">
+                <option value="best" selected>Tertinggi (Best)</option>
+                <option value="1080">1080p</option>
+                <option value="720">720p</option>
+                <option value="480">480p</option>
+              </select>
+            </div>
+            <div class="form-group hidden" id="batch-audio-quality-group">
+              <label for="batch-audio-quality-select">Kualitas Audio</label>
+              <select id="batch-audio-quality-select">
+                <option value="320">320 kbps</option>
+                <option value="192" selected>192 kbps</option>
+                <option value="128">128 kbps</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="action-btn-row">
+            <button type="button" id="batch-download-btn" class="btn btn-primary btn-lg">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span>Unduh Semua Sekaligus</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: ACTIVE QUEUE & MONITORING -->
+      <section id="queue-tab" class="tab-pane">
+        <div class="card">
+          <div class="card-title-row">
+            <h2>Antrian &amp; Pemantau Unduhan Aktif</h2>
+            <span class="badge badge-info" id="concurrency-info">Maksimal 3 proses paralel</span>
+          </div>
+
+          <div id="queue-empty" class="empty-state">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+            <p>Tidak ada proses unduhan aktif saat ini.</p>
+          </div>
+
+          <div id="queue-items-container" class="queue-cards-list"></div>
+        </div>
+      </section>
+
+      <!-- TAB 4: HISTORY -->
+      <section id="history-tab" class="tab-pane">
+        <div class="card">
+          <div class="card-title-row">
+            <h2>Riwayat Unduhan</h2>
+            <div class="history-actions">
+              <button type="button" id="refresh-history-btn" class="btn btn-sm btn-secondary">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                Refresh
+              </button>
+              <button type="button" id="clear-history-btn" class="btn btn-sm btn-danger">Hapus Semua</button>
+            </div>
+          </div>
+
+          <!-- History Filter Bar -->
+          <div class="history-filters">
+            <div class="input-with-icon search-box">
+              <svg class="input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="history-search-input" placeholder="Cari judul atau URL..." />
+            </div>
+            <select id="history-status-filter" class="filter-select">
+              <option value="all">Semua Status</option>
+              <option value="completed">Selesai</option>
+              <option value="failed">Gagal</option>
+              <option value="cancelled">Dibatalkan</option>
+            </select>
+          </div>
+
+          <div id="history-empty" class="empty-state">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <p>Belum ada riwayat unduhan.</p>
+          </div>
+
+          <div class="table-responsive">
+            <table id="history-table" class="data-table hidden">
+              <thead>
+                <tr>
+                  <th>Judul Media</th>
+                  <th>Platform</th>
+                  <th>Format / Res</th>
+                  <th>Ukuran</th>
+                  <th>Status</th>
+                  <th>Waktu</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="history-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 5: SETTINGS & STATS -->
+      <section id="settings-tab" class="tab-pane">
+        <!-- STATS CARDS ROW -->
+        <div class="stats-row">
+          <div class="stat-card">
+            <span class="stat-label">Total Unduhan</span>
+            <span class="stat-value" id="stat-total">0</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Berhasil</span>
+            <span class="stat-value text-success" id="stat-completed">0</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Gagal / Dibatalkan</span>
+            <span class="stat-value text-danger" id="stat-failed">0</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-label">Total Penyimpanan Digunakan</span>
+            <span class="stat-value text-accent" id="stat-size">0 MB</span>
+          </div>
+        </div>
+
+        <div class="card mt-3">
+          <h3>Folder Penyimpanan</h3>
+          <p class="muted-text">Semua file video dan MP3 yang Anda unduh akan disimpan di direktori ini.</p>
+          <div class="folder-control-group">
+            <input type="text" id="folder-input" readonly placeholder="Memuat folder penyimpanan..." />
+            <button type="button" id="pick-folder-btn" class="btn btn-secondary">Pilih Folder</button>
+            <button type="button" id="open-folder-btn" class="btn btn-outline" title="Buka di Windows Explorer">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              Buka di Explorer
+            </button>
+          </div>
+        </div>
+
+        <div class="card mt-3">
+          <h3>Autentikasi &amp; Cookies Browser</h3>
+          <p class="muted-text">Gunakan opsi ini jika YouTube memunculkan pesan verifikasi bot, pembatasan usia (Age Restriction), atau konten private.</p>
+          <div class="cookies-control-group">
+            <div class="form-group">
+              <label for="cookie-mode">Metode Cookies</label>
+              <select id="cookie-mode">
+                <option value="none">Tidak Pakai Cookies (Default)</option>
+                <option value="browser">Ambil Langsung dari Browser</option>
+                <option value="file">Gunakan File cookies.txt</option>
+              </select>
+            </div>
+            <div class="form-group hidden" id="cookie-browser-group">
+              <label for="cookie-browser">Pilih Browser</label>
+              <select id="cookie-browser">
+                <option value="chrome">Google Chrome</option>
+                <option value="edge">Microsoft Edge</option>
+                <option value="firefox">Mozilla Firefox</option>
+                <option value="brave">Brave Browser</option>
+                <option value="opera">Opera</option>
+                <option value="vivaldi">Vivaldi</option>
+              </select>
+            </div>
+            <div class="form-group hidden" id="cookie-file-group">
+              <label for="cookie-file-input">File cookies.txt</label>
+              <div class="flex-row gap-2">
+                <input type="text" id="cookie-file-input" readonly placeholder="Path cookies.txt..." />
+                <input type="file" id="cookie-file-upload" accept=".txt" class="hidden" />
+                <button type="button" id="upload-cookies-btn" class="btn btn-primary" title="Upload file cookies.txt dari HP/Komputer">Upload File</button>
+                <button type="button" id="pick-cookies-btn" class="btn btn-secondary" title="Pilih file lokal di server">Cari</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card mt-3">
+          <h3>Mode Cloud / Hemat Storage Server</h3>
+          <p class="muted-text">Opsi khusus untuk server/cloud agar file langsung terunduh ke komputer Anda dan tidak menghabiskan kuota harddisk server.</p>
+          <div class="mt-2">
+            <label class="custom-checkbox">
+              <input type="checkbox" id="auto-stream-delete-checkbox" />
+              <span><strong>Auto-Download &amp; Cleanup:</strong> Otomatis unduh file ke laptop/HP begitu selesai dan langsung hapus dari server</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="card mt-3">
+          <div class="card-title-row">
+            <h3>Informasi Sistem &amp; Komponen</h3>
+            <div class="flex-row gap-2">
+              <button type="button" id="check-ytdlp-btn" class="btn btn-sm btn-secondary">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                Cek Update yt-dlp
+              </button>
+              <button type="button" id="upgrade-ytdlp-btn" class="btn btn-sm btn-primary hidden">
+                Update Sekarang
+              </button>
+            </div>
+          </div>
+          <div class="system-info-grid">
+            <div class="info-item">
+              <span class="info-title">Status FFmpeg</span>
+              <span class="info-val" id="sys-ffmpeg">-</span>
+            </div>
+            <div class="info-item">
+              <span class="info-title">Versi yt-dlp</span>
+              <div class="flex-row gap-2" style="align-items:center;">
+                <span class="info-val" id="sys-ytdlp">-</span>
+                <span id="ytdlp-update-badge" class="badge badge-neutral hidden">Terbaru</span>
+              </div>
+            </div>
+            <div class="info-item">
+              <span class="info-title">Sisa Ruang Disk</span>
+              <span class="info-val" id="sys-disk">-</span>
+            </div>
+            <div class="info-item">
+              <span class="info-title">Lokasi FFmpeg</span>
+              <span class="info-val text-mono" id="sys-ffmpeg-path">-</span>
+            </div>
+          </div>
+
+          <div class="mt-3">
+            <label class="custom-checkbox">
+              <input type="checkbox" id="auto-update-ytdlp-checkbox" checked />
+              <span>Update otomatis engine <code>yt-dlp</code> di latar belakang saat aplikasi dijalankan</span>
+            </label>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- TOAST CONTAINER -->
+    <div id="toast-container" class="toast-container"></div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -19,7 +19,12 @@ import yt_dlp
 
 from app import database
 
-DOWNLOADS_DIR = Path(__file__).resolve().parent.parent / "downloads"
+# Lokasi folder download: gunakan public Download Android jika tersedia
+_android_download = os.environ.get("ANDROID_DOWNLOAD_DIR")
+if _android_download:
+    DOWNLOADS_DIR = Path(_android_download) / "YTDownloader"
+else:
+    DOWNLOADS_DIR = Path(__file__).resolve().parent.parent / "downloads"
 DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 _TASKS_LOCK = threading.Lock()
