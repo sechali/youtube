@@ -1,45 +1,89 @@
-# Media Downloader Web App
+# Media Downloader Pro — Video & Audio HD
 
-Aplikasi web berbasis Python (FastAPI + `yt-dlp` + `FFmpeg` + SQLite) untuk mengunduh video dan mengekstrak audio MP3 dari berbagai situs seperti YouTube, Facebook, Instagram, Threads, TikTok, dan lainnya.
+Aplikasi web modern berbasis Python (**FastAPI** + **yt-dlp** + **FFmpeg** + **SQLite**) untuk mengunduh video kualitas tinggi hingga 4K, mengekstrak audio berbagai format (MP3, M4A, FLAC, WAV, AAC, OPUS), batch download multi-link, unduh subtitle/caption, dan manajemen antrian unduhan secara otomatis.
 
-## Panduan untuk Developer (Melanjutkan Pengembangan di Komputer Baru)
+Mendukung berbagai platform populer: **YouTube, TikTok, Instagram (Reels & Post), Facebook, Twitter / X, Threads, Vimeo**, dan ribuan situs web lainnya yang didukung oleh engine `yt-dlp`.
 
-### Prasyarat
-1. **Python 3.10+** (pastikan centang *Add python.exe to PATH* saat instalasi).
-2. **Git** (opsional, jika menggunakan repository GitHub/GitLab).
-3. **VS Code** atau IDE favorit Anda.
+---
 
-### Setup Environment Development
-1. Buka folder project di terminal:
-   ```powershell
-   python -m venv .venv
-   .\.venv\Scripts\activate
-   pip install -r requirements.txt
-   ```
-   *(Atau cukup klik 2x file `Setup_Install.bat`)*
+## ✨ Fitur-Fitur Utama
 
-2. Jalankan server dalam mode **Hot-Reload / Dev Mode**:
-   ```powershell
-   .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
-   ```
-   *Dengan flag `--reload`, setiap kali Anda mengedit file di folder `app/`, server akan otomatis me-restart tanpa perlu dimatikan manual.*
+### 1. Unduhan Fleksibel (Single & Batch Download)
+- **Single Link**: Inspeksi URL seketika, preview thumbnail visual, durasi, uploader, dan deteksi subtitle.
+- **Batch / Multi-Link**: Masukkan puluhan link sekaligus (satu link per baris) dan unduh secara serentak dengan satu klik.
+- **Dukungan Playlist**: Deteksi playlist otomatis dengan pemilih item individual (misal: 1-5, 8, 10) atau unduh seluruh playlist ke dalam arsip `.zip`.
 
-### Struktur File Penting:
-- `app/main.py`: Endpoint API FastAPI (inspeksi link, trigger download, task management, folder setting).
-- `app/downloader.py`: Logika yt-dlp, thread worker background, progress tracking, dan cancel/resume logic.
-- `app/database.py`: Skema SQLite untuk riwayat unduhan & setting folder/cookies.
-- `app/static/`: Frontend web (UI, styling responsif, dan logika JavaScript interaktif).
+### 2. Kualitas & Format Lengkap
+- **Video Kualitas Tinggi**: Pilihan resolusi otomatis sesuai video asli: **Best, 4K (2160p), 2K (1440p), 1080p (Full HD), 720p (HD), 480p, 360p**.
+- **Format Kontainer Video**: **MP4** (universal), **MKV** (multi-track), dan **WebM**.
+- **Format Ekstraksi Audio**: **MP3, M4A, FLAC (Lossless), WAV, AAC, OPUS**.
+- **Bitrate Audio**: **320 kbps (High Quality), 256 kbps, 192 kbps (Standar CD), 128 kbps**.
+- **Subtitle / Caption**: Unduh subtitle (.srt/.vtt) multibahasa (Indonesia, Inggris, atau semua) serta opsi embed langsung ke video.
 
+### 3. Queue & Concurrency Management
+- Sistem antrian dengan batasan concurrency (default 3 unduhan paralel) untuk mencegah jaringan macet atau CPU overload.
+- Kontrol penuh: Pantau kecepatan (MB/s), estimasi waktu selesai (ETA), tombol **Stop / Pause**, dan **Resume**.
 
-## Cara Menjalankan
+### 4. UI / UX Modern & Interaktif
+- **Dark Mode & Light Mode**: Desain responsif dengan toggle tema yang tersimpan otomatis di browser.
+- **Tab Navigasi Terstruktur**: Single Link, Batch Downloader, Antrian Aktif, Riwayat Unduhan, serta Pengaturan & Info Sistem.
+- **Diagnostik Sistem Real-time**: Indikator status FFmpeg, versi engine `yt-dlp`, dan sisa kapasitas ruang penyimpanan harddisk.
+- **Integrasi Windows Explorer**: Tombol 1-klik untuk langsung membuka folder penyimpanan atau menandai file yang selesai diunduh di File Explorer.
+
+### 5. Penanganan Autentikasi / Anti-Bot
+- Ekstraksi cookies otomatis dari browser lokal (**Google Chrome, Microsoft Edge, Mozilla Firefox, Brave, Opera, Vivaldi**) atau menggunakan file `cookies.txt` untuk mengakses video yang membutuhkan verifikasi login, batasan usia (Age Restriction), atau konten privat.
+
+---
+
+## 🛠️ Prasyarat
+1. **Python 3.10+** (Pastikan opsi *"Add python.exe to PATH"* dicentang saat instalasi).
+2. **FFmpeg** (Otomatis dicek dan diinstall via `winget` saat setup).
+
+---
+
+## 🚀 Cara Menjalankan
 
 ### Cara Cepat (1x Klik di Windows)
-1. **Saat pertama kali / pindah komputer**: klik 2x [Setup_Install.bat](Setup_Install.bat) untuk membuat `.venv`, menginstall semua library (`fastapi`, `uvicorn`, `yt-dlp`), dan mengecek `FFmpeg`.
-2. **Menjalankan aplikasi**: klik 2x [Jalankan_Aplikasi.bat](Jalankan_Aplikasi.bat) — server akan menyala dan browser otomatis terbuka ke `http://127.0.0.1:8000`.
+1. **Setup Awal**: Klik 2x file [Setup_Install.bat](Setup_Install.bat). Script ini akan otomatis membuat virtual environment (`.venv`), menginstal semua dependensi, serta memastikan `FFmpeg` terpasang.
+2. **Menjalankan Aplikasi**: Klik 2x file [Jalankan_Aplikasi.bat](Jalankan_Aplikasi.bat). Server FastAPI akan menyala dan browser otomatis terbuka ke:
+   ```
+   http://127.0.0.1:8000
+   ```
 
-### Cara Manual (Terminal)
+### Cara Manual (Terminal / VS Code)
 ```powershell
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+# 1. Masuk ke virtual environment
+.\.venv\Scripts\activate
+
+# 2. Jalankan server dengan Hot-Reload (Dev Mode)
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Lalu buka browser ke: `http://127.0.0.1:8000`
+---
+
+## 📂 Struktur Proyek
+```
+ytdownloader/
+│
+├── app/
+│   ├── __init__.py
+│   ├── main.py          # Routing API FastAPI (Inspect, Download, Batch, Settings, Stats)
+│   ├── downloader.py    # Engine yt-dlp, thread worker, concurrency semaphore, progress hooks
+│   ├── database.py      # SQLite database helper, skema riwayat, migrasi, & kalkulasi statistik
+│   └── static/
+│       ├── index.html   # Tampilan Web Pro (Single, Batch, Queue, History, Settings)
+│       ├── style.css    # Styling modern responsif, Dark/Light theme, glassmorphism
+│       └── app.js       # Logika interaktif frontend, polling antrian, filter riwayat, toast
+│
+├── history.db           # Database SQLite lokal (riwayat unduhan & preferensi)
+├── downloads/           # Folder penyimpanan unduhan default
+├── Setup_Install.bat    # Script otomatisasi instalasi dep & FFmpeg
+├── Jalankan_Aplikasi.bat# Script peluncur aplikasi 1-klik
+├── requirements.txt     # Dependensi library Python
+└── README.md
+```
+
+---
+
+## 📜 Lisensi
+MIT License — Bebas digunakan, dimodifikasi, dan dikembangkan lebih lanjut.

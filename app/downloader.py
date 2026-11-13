@@ -1,7 +1,8 @@
-"""yt-dlp wrapper and background task manager for media downloads."""
+"""yt-dlp wrapper, queue concurrency manager, and background task engine."""
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -20,6 +21,23 @@ DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 _TASKS_LOCK = threading.Lock()
 _TASKS: dict[str, dict[str, Any]] = {}
+
+# Maksimum unduhan aktif bersamaan (concurrency limiter)
+MAX_CONCURRENT_DOWNLOADS = 3
+_SEMAPHORE = threading.Semaphore(MAX_CONCURRENT_DOWNLOADS)
+
+
+def _ensure_ffmpeg_path() -> None:
+    """Ensure ffmpeg is in system PATH for the current process."""
+    if shutil.which("ffmpeg"):
+        return
+    # Periksa lokasi standar winget jika belum masuk ke current os.environ["PATH"]
+    winget_links = Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft" / "WinGet" / "Links"
+    if (winget_links / "ffmpeg.exe").is_file():
+        os.environ["PATH"] = f"{winget_links};{os.environ.get('PATH', '')}"
+
+
+_ensure_ffmpeg_path()
 
 
 def get_download_dir() -> Path:
@@ -63,7 +81,7 @@ def pick_folder_dialog() -> str | None:
     return None
 
 
-SUPPORTED_COOKIE_BROWSERS = {"chrome", "edge", "firefox", "brave", "opera"}
+SUPPORTED_COOKIE_BROWSERS = {"chrome", "edge", "firefox", "brave", "opera", "vivaldi"}
 
 
 def get_cookie_settings() -> dict[str, str]:
@@ -112,6 +130,79 @@ def pick_cookies_file_dialog() -> str | None:
     return None
 
 
+def open_folder_in_explorer(target_path: str | None = None) -> bool:
+    """Open a directory in Windows Explorer."""
+    path = Path(target_path).resolve() if target_path else get_download_dir()
+    if not path.exists():
+        path = get_download_dir()
+    try:
+        if sys.platform == "win32":
+            os.startfile(str(path))
+            return True
+        elif sys.platform == "darwin":
+            subprocess.run(["open", str(path)])
+            return True
+        else:
+            subprocess.run(["xdg-open", str(path)])
+            return True
+    except Exception:
+        return False
+
+
+def highlight_file_in_explorer(file_path: str) -> bool:
+    """Select and highlight a specific downloaded file in Windows Explorer."""
+    p = Path(file_path).resolve()
+    if not p.is_file():
+        return False
+    try:
+        if sys.platform == "win32":
+            subprocess.run(["explorer.exe", f"/select,{str(p)}"])
+            return True
+        else:
+            return open_folder_in_explorer(str(p.parent))
+    except Exception:
+        return False
+
+
+def get_system_status() -> dict[str, Any]:
+    """Retrieve system diagnostics: FFmpeg status, yt-dlp version, disk space, and active queue."""
+    _ensure_ffmpeg_path()
+    ffmpeg_bin = shutil.which("ffmpeg")
+    ffmpeg_ver = "-"
+    if ffmpeg_bin:
+        try:
+            res = subprocess.run([ffmpeg_bin, "-version"], capture_output=True, text=True, timeout=5)
+            first_line = (res.stdout or "").splitlines()[0] if res.stdout else "Installed"
+            m = re.search(r"ffmpeg version\s+([^\s]+)", first_line)
+            ffmpeg_ver = m.group(1) if m else "Installed"
+        except Exception:
+            ffmpeg_ver = "Installed"
+
+    download_dir = get_download_dir()
+    free_gb = 0.0
+    try:
+        total, used, free = shutil.disk_usage(download_dir)
+        free_gb = round(free / (1024**3), 2)
+    except Exception:
+        pass
+
+    with _TASKS_LOCK:
+        active_count = sum(1 for t in _TASKS.values() if t.get("status") in ("downloading", "processing"))
+        queued_count = sum(1 for t in _TASKS.values() if t.get("status") == "queued")
+
+    return {
+        "ffmpeg_installed": bool(ffmpeg_bin),
+        "ffmpeg_version": ffmpeg_ver,
+        "ffmpeg_path": ffmpeg_bin or "Tidak ditemukan",
+        "ytdlp_version": getattr(yt_dlp.version, "__version__", "Terpasang"),
+        "download_dir": str(download_dir),
+        "free_disk_gb": free_gb,
+        "active_downloads": active_count,
+        "queued_downloads": queued_count,
+        "max_concurrent": MAX_CONCURRENT_DOWNLOADS,
+    }
+
+
 def _apply_cookie_opts(ydl_opts: dict[str, Any]) -> None:
     cfg = get_cookie_settings()
     mode = cfg["cookie_mode"]
@@ -142,7 +233,8 @@ def _format_duration(seconds: int | float | None) -> str:
 
 
 def inspect_url(url: str) -> dict[str, Any]:
-    """Extract metadata and available resolutions without downloading."""
+    """Extract metadata, formats, and available resolutions without downloading."""
+    _ensure_ffmpeg_path()
     ydl_opts = {
         "quiet": True,
         "no_warnings": True,
@@ -150,8 +242,18 @@ def inspect_url(url: str) -> dict[str, Any]:
         "skip_download": True,
     }
     _apply_cookie_opts(ydl_opts)
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+    except Exception as exc:
+        msg = str(exc)
+        if "bot" in msg.lower() or "sign in" in msg.lower():
+            raise ValueError(
+                "YouTube meminta verifikasi / login. Silakan aktifkan opsi 'Autentikasi / Cookies' "
+                "dari Browser di tab Pengaturan."
+            ) from exc
+        raise ValueError(f"Gagal memeriksa URL: {msg}") from exc
 
     if not info:
         raise ValueError("Tidak dapat mengambil informasi dari URL tersebut.")
@@ -160,6 +262,8 @@ def inspect_url(url: str) -> dict[str, Any]:
     entries = list(info.get("entries") or []) if is_playlist else []
 
     playlist_videos = []
+    thumbnail = info.get("thumbnail")
+
     if is_playlist:
         for idx, entry in enumerate(entries, 1):
             if not entry:
@@ -180,8 +284,11 @@ def inspect_url(url: str) -> dict[str, Any]:
                     "url": entry.get("url") or entry.get("webpage_url") or "",
                 }
             )
+        if not thumbnail and entries:
+            first = entries[0] or {}
+            thumbs = first.get("thumbnails") or []
+            thumbnail = first.get("thumbnail") or (thumbs[-1].get("url") if thumbs else None)
     else:
-        # Jika single video, masukkan ke list agar bisa dilihat sebelum download
         playlist_videos.append(
             {
                 "index": 1,
@@ -194,6 +301,8 @@ def inspect_url(url: str) -> dict[str, Any]:
         )
 
     resolutions: list[int] = []
+    subtitles_available: list[str] = []
+
     if not is_playlist:
         heights = {
             int(fmt["height"])
@@ -201,12 +310,9 @@ def inspect_url(url: str) -> dict[str, Any]:
             if fmt.get("height") and fmt.get("vcodec") != "none"
         }
         resolutions = sorted(heights, reverse=True)
-
-    thumbnail = info.get("thumbnail")
-    if not thumbnail and entries:
-        first = entries[0] or {}
-        thumbs = first.get("thumbnails") or []
-        thumbnail = first.get("thumbnail") or (thumbs[-1].get("url") if thumbs else None)
+        raw_subs = info.get("subtitles") or {}
+        raw_auto = info.get("automatic_captions") or {}
+        subtitles_available = sorted(list(set(list(raw_subs.keys()) + list(raw_auto.keys()))))
 
     return {
         "url": url,
@@ -219,6 +325,7 @@ def inspect_url(url: str) -> dict[str, Any]:
         "playlist_count": len(entries) if is_playlist else 1,
         "playlist_videos": playlist_videos,
         "resolutions": resolutions,
+        "subtitles_available": subtitles_available,
     }
 
 
@@ -334,10 +441,16 @@ def start_download(
     format_type: str = "video",
     resolution: str = "best",
     audio_quality: str = "192",
+    video_ext: str = "mp4",
+    audio_format: str = "mp3",
+    download_subtitles: bool = False,
+    subtitles_lang: str = "id,en",
+    embed_subtitles: bool = False,
     download_playlist: bool = False,
     playlist_items: str | None = None,
     output_dir: str | None = None,
     resume_task_dir: str | None = None,
+    batch_id: str | None = None,
 ) -> str:
     """Queue a background download task and return its task_id."""
     task_id = uuid.uuid4().hex[:12]
@@ -348,20 +461,29 @@ def start_download(
     if download_playlist and not task_dir:
         task_dir = str(base_dir / f"playlist_{task_id}")
 
+    chosen_format = audio_format if format_type == "audio" else video_ext
+
     with _TASKS_LOCK:
         _TASKS[task_id] = {
             "task_id": task_id,
+            "batch_id": batch_id,
             "url": url,
             "status": "queued",
-            "status_text": "Menyiapkan unduhan...",
+            "status_text": "Menunggu antrian...",
             "progress": 0.0,
             "speed": "-",
             "eta": "-",
             "title": "Memproses...",
             "platform": "-",
             "format_type": format_type,
+            "file_format": chosen_format,
             "resolution": resolution,
             "audio_quality": audio_quality,
+            "video_ext": video_ext,
+            "audio_format": audio_format,
+            "download_subtitles": download_subtitles,
+            "subtitles_lang": subtitles_lang,
+            "embed_subtitles": embed_subtitles,
             "is_playlist": download_playlist,
             "playlist_items": playlist_items,
             "playlist_index": 0,
@@ -376,22 +498,71 @@ def start_download(
         }
 
     thread = threading.Thread(
-        target=_run_download,
+        target=_worker_wrapper,
         args=(
             task_id,
             url,
             format_type,
             resolution,
             audio_quality,
+            video_ext,
+            audio_format,
+            download_subtitles,
+            subtitles_lang,
+            embed_subtitles,
             download_playlist,
             playlist_items,
             str(base_dir),
             task_dir,
+            batch_id,
         ),
         daemon=True,
     )
     thread.start()
     return task_id
+
+
+def start_batch_download(
+    urls: list[str],
+    format_type: str = "video",
+    resolution: str = "best",
+    audio_quality: str = "192",
+    video_ext: str = "mp4",
+    audio_format: str = "mp3",
+    download_subtitles: bool = False,
+    subtitles_lang: str = "id,en",
+    embed_subtitles: bool = False,
+    output_dir: str | None = None,
+) -> dict[str, Any]:
+    """Queue multiple URLs as a batch download group."""
+    batch_id = uuid.uuid4().hex[:8]
+    valid_urls = [u.strip() for u in urls if u and u.strip().startswith(("http://", "https://"))]
+    if not valid_urls:
+        raise ValueError("Tidak ada URL valid yang diberikan.")
+
+    task_ids = []
+    for u in valid_urls:
+        t_id = start_download(
+            url=u,
+            format_type=format_type,
+            resolution=resolution,
+            audio_quality=audio_quality,
+            video_ext=video_ext,
+            audio_format=audio_format,
+            download_subtitles=download_subtitles,
+            subtitles_lang=subtitles_lang,
+            embed_subtitles=embed_subtitles,
+            download_playlist=False,
+            output_dir=output_dir,
+            batch_id=batch_id,
+        )
+        task_ids.append(t_id)
+
+    return {
+        "batch_id": batch_id,
+        "total": len(task_ids),
+        "task_ids": task_ids,
+    }
 
 
 def resume_task(task_id: str) -> str:
@@ -404,10 +575,16 @@ def resume_task(task_id: str) -> str:
         format_type=task.get("format_type", "video"),
         resolution=task.get("resolution", "best"),
         audio_quality=task.get("audio_quality", "192"),
+        video_ext=task.get("video_ext", "mp4"),
+        audio_format=task.get("audio_format", "mp3"),
+        download_subtitles=bool(task.get("download_subtitles")),
+        subtitles_lang=task.get("subtitles_lang", "id,en"),
+        embed_subtitles=bool(task.get("embed_subtitles")),
         download_playlist=bool(task.get("is_playlist")),
         playlist_items=task.get("playlist_items"),
         output_dir=task.get("output_dir"),
         resume_task_dir=task.get("task_dir"),
+        batch_id=task.get("batch_id"),
     )
 
 
@@ -417,20 +594,80 @@ def resume_from_history(history_id: int) -> str:
     if not item:
         raise ValueError("Riwayat tidak ditemukan.")
     raw_res = item.get("resolution") or "best"
-    if raw_res in ("Terbaik", "best") or raw_res.startswith("MP3"):
+    if raw_res in ("Terbaik", "best") or raw_res.startswith("MP3") or "kbps" in raw_res:
         res_val = "best"
     else:
         res_val = raw_res.rstrip("p") if raw_res.endswith("p") and raw_res[:-1].isdigit() else "best"
+
+    fmt_type = item.get("format_type", "video")
+    saved_fmt = item.get("file_format", "")
+    video_ext = saved_fmt if (fmt_type == "video" and saved_fmt in ("mp4", "mkv", "webm")) else "mp4"
+    audio_fmt = saved_fmt if (fmt_type == "audio" and saved_fmt) else "mp3"
+
     return start_download(
         url=item["url"],
-        format_type=item.get("format_type", "video"),
+        format_type=fmt_type,
         resolution=res_val,
         audio_quality=item.get("audio_quality") or "192",
+        video_ext=video_ext,
+        audio_format=audio_fmt,
+        download_subtitles=bool(item.get("subtitles")),
+        subtitles_lang="id,en",
+        embed_subtitles=False,
         download_playlist=bool(item.get("is_playlist")),
         playlist_items=item.get("playlist_items"),
         output_dir=item.get("output_dir"),
         resume_task_dir=item.get("task_dir"),
+        batch_id=item.get("batch_id"),
     )
+
+
+def _worker_wrapper(
+    task_id: str,
+    url: str,
+    format_type: str,
+    resolution: str,
+    audio_quality: str,
+    video_ext: str,
+    audio_format: str,
+    download_subtitles: bool,
+    subtitles_lang: str,
+    embed_subtitles: bool,
+    download_playlist: bool,
+    playlist_items: str | None,
+    output_dir: str,
+    task_dir: str | None,
+    batch_id: str | None,
+) -> None:
+    """Wait for concurrency semaphore slot and run download."""
+    if _is_cancelled(task_id):
+        _finalize_task_items(task_id, "cancelled")
+        _update_task(task_id, status="cancelled", status_text="Dibatalkan saat antrian.")
+        return
+
+    with _SEMAPHORE:
+        if _is_cancelled(task_id):
+            _finalize_task_items(task_id, "cancelled")
+            _update_task(task_id, status="cancelled", status_text="Dibatalkan saat antrian.")
+            return
+
+        _run_download(
+            task_id=task_id,
+            url=url,
+            format_type=format_type,
+            resolution=resolution,
+            audio_quality=audio_quality,
+            video_ext=video_ext,
+            audio_format=audio_format,
+            download_subtitles=download_subtitles,
+            subtitles_lang=subtitles_lang,
+            embed_subtitles=embed_subtitles,
+            download_playlist=download_playlist,
+            playlist_items=playlist_items,
+            output_dir=output_dir,
+            task_dir=task_dir,
+            batch_id=batch_id,
+        )
 
 
 def _run_download(
@@ -439,11 +676,18 @@ def _run_download(
     format_type: str,
     resolution: str,
     audio_quality: str,
+    video_ext: str,
+    audio_format: str,
+    download_subtitles: bool,
+    subtitles_lang: str,
+    embed_subtitles: bool,
     download_playlist: bool,
     playlist_items: str | None,
     output_dir: str,
     task_dir: str | None,
+    batch_id: str | None,
 ) -> None:
+    _ensure_ffmpeg_path()
     title = "Media"
     platform = "Web"
     is_playlist_actual = False
@@ -452,6 +696,7 @@ def _run_download(
     target_dir.mkdir(parents=True, exist_ok=True)
 
     downloaded_files: list[Path] = []
+    chosen_file_format = audio_format if format_type == "audio" else video_ext
 
     def progress_hook(d: dict[str, Any]) -> None:
         if _is_cancelled(task_id):
@@ -489,7 +734,7 @@ def _run_download(
             _update_task(
                 task_id,
                 status="processing",
-                status_text="Memproses / mengonversi media dengan FFmpeg...",
+                status_text="Memproses & menggabungkan file (FFmpeg)...",
                 progress=99.0,
                 speed="-",
                 eta="-",
@@ -519,30 +764,50 @@ def _run_download(
     if download_playlist and playlist_items:
         ydl_opts["playlist_items"] = playlist_items.strip()
 
+    # Opsi Subtitle / Caption
+    if download_subtitles:
+        ydl_opts["writesubtitles"] = True
+        ydl_opts["writeautomaticsub"] = True
+        lang_str = subtitles_lang.strip() if subtitles_lang else "id,en"
+        if lang_str.lower() != "all":
+            ydl_opts["subtitleslangs"] = [l.strip() for l in lang_str.split(",") if l.strip()]
+        ydl_opts["subtitlesformat"] = "srt/vtt/best"
+
+    # Konfigurasi Audio vs Video
     if format_type == "audio":
         ydl_opts["format"] = "bestaudio/best"
-        ydl_opts["postprocessors"] = [
-            {
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "mp3",
-                "preferredquality": audio_quality,
-            }
-        ]
-        res_label = f"MP3 {audio_quality}kbps"
+        codec = audio_format.lower() if audio_format.lower() in ("mp3", "m4a", "wav", "flac", "aac", "opus") else "mp3"
+        postproc: dict[str, Any] = {
+            "key": "FFmpegExtractAudio",
+            "preferredcodec": codec,
+        }
+        if codec in ("mp3", "m4a", "opus"):
+            postproc["preferredquality"] = audio_quality if audio_quality in ("128", "192", "256", "320") else "192"
+        ydl_opts["postprocessors"] = [postproc]
+        res_label = f"{codec.upper()} {audio_quality}kbps"
     else:
+        # Video format
+        target_ext = video_ext.lower() if video_ext.lower() in ("mp4", "mkv", "webm") else "mp4"
         if resolution == "best":
             ydl_opts["format"] = (
-                "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best"
+                f"bestvideo[ext={target_ext}]+bestaudio/bestvideo+bestaudio/best"
             )
             res_label = "Terbaik"
         else:
             h = int(resolution)
             ydl_opts["format"] = (
-                f"bestvideo[height<={h}][ext=mp4]+bestaudio[ext=m4a]/"
+                f"bestvideo[height<={h}][ext={target_ext}]+bestaudio/"
                 f"bestvideo[height<={h}]+bestaudio/best[height<={h}]/best"
             )
             res_label = f"{h}p"
-        ydl_opts["merge_output_format"] = "mp4"
+        ydl_opts["merge_output_format"] = target_ext
+
+        # Embed subtitle ke video jika diminta
+        if download_subtitles and embed_subtitles and target_ext in ("mp4", "mkv"):
+            ydl_opts.setdefault("postprocessors", []).append({
+                "key": "FFmpegEmbedSubtitle",
+                "already_have_subtitle": False,
+            })
 
     try:
         _update_task(task_id, status="downloading", status_text="Mengambil metadata...")
@@ -556,6 +821,7 @@ def _run_download(
         if download_playlist and playlist_items:
             pre_opts["playlist_items"] = playlist_items.strip()
         _apply_cookie_opts(pre_opts)
+
         try:
             with yt_dlp.YoutubeDL(pre_opts) as pre_ydl:
                 pre_info = pre_ydl.extract_info(url, download=False)
@@ -615,9 +881,9 @@ def _run_download(
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     candidate = Path(ydl.prepare_filename(info))
                     if format_type == "audio":
-                        candidate = candidate.with_suffix(".mp3")
-                    elif candidate.with_suffix(".mp4").exists():
-                        candidate = candidate.with_suffix(".mp4")
+                        candidate = candidate.with_suffix(f".{chosen_file_format}")
+                    elif candidate.with_suffix(f".{chosen_file_format}").exists():
+                        candidate = candidate.with_suffix(f".{chosen_file_format}")
                     if candidate.exists():
                         final_file = candidate
 
@@ -633,6 +899,9 @@ def _run_download(
                 "format_type": format_type,
                 "resolution": res_label,
                 "audio_quality": audio_quality,
+                "file_format": chosen_file_format,
+                "subtitles": subtitles_lang if download_subtitles else "",
+                "batch_id": batch_id,
                 "is_playlist": is_playlist_actual or download_playlist,
                 "playlist_items": playlist_items,
                 "output_dir": str(base_dir),
@@ -667,6 +936,9 @@ def _run_download(
                 "format_type": format_type,
                 "resolution": res_label,
                 "audio_quality": audio_quality,
+                "file_format": chosen_file_format,
+                "subtitles": subtitles_lang if download_subtitles else "",
+                "batch_id": batch_id,
                 "is_playlist": download_playlist,
                 "playlist_items": playlist_items,
                 "output_dir": str(base_dir),
@@ -686,7 +958,16 @@ def _run_download(
             eta="-",
         )
     except Exception as exc:
-        err_msg = str(exc)
+        raw_err = str(exc)
+        if "bot" in raw_err.lower() or "sign in" in raw_err.lower():
+            err_msg = "Akses diblokir (Sign in / Bot check). Aktifkan Cookies Browser di menu Pengaturan."
+        elif "private" in raw_err.lower():
+            err_msg = "Konten bersifat privat atau memerlukan autentikasi login."
+        elif "ffmpeg" in raw_err.lower():
+            err_msg = "FFmpeg diperlukan untuk menggabungkan/mengonversi format ini."
+        else:
+            err_msg = raw_err[:300]
+
         _finalize_task_items(task_id, "failed")
         database.add_history(
             {
@@ -696,6 +977,9 @@ def _run_download(
                 "format_type": format_type,
                 "resolution": res_label,
                 "audio_quality": audio_quality,
+                "file_format": chosen_file_format,
+                "subtitles": subtitles_lang if download_subtitles else "",
+                "batch_id": batch_id,
                 "is_playlist": download_playlist,
                 "playlist_items": playlist_items,
                 "output_dir": str(base_dir),
@@ -704,7 +988,7 @@ def _run_download(
                 "file_path": None,
                 "file_size": 0,
                 "status": "failed",
-                "error_message": err_msg[:300],
+                "error_message": err_msg,
             }
         )
         _update_task(

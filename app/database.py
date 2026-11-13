@@ -1,4 +1,4 @@
-"""SQLite database helpers for storing download history."""
+"""SQLite database helpers for storing download history and app configuration."""
 
 from __future__ import annotations
 
@@ -28,6 +28,9 @@ def init_db() -> None:
                 format_type TEXT NOT NULL,
                 resolution TEXT NOT NULL,
                 audio_quality TEXT DEFAULT '192',
+                file_format TEXT DEFAULT '',
+                subtitles TEXT DEFAULT '',
+                batch_id TEXT,
                 is_playlist INTEGER NOT NULL DEFAULT 0,
                 playlist_items TEXT,
                 output_dir TEXT,
@@ -49,12 +52,16 @@ def init_db() -> None:
             )
             """
         )
+
         existing_cols = {
             row["name"]
             for row in conn.execute("PRAGMA table_info(download_history)").fetchall()
         }
         migrations = {
             "audio_quality": "TEXT DEFAULT '192'",
+            "file_format": "TEXT DEFAULT ''",
+            "subtitles": "TEXT DEFAULT ''",
+            "batch_id": "TEXT",
             "playlist_items": "TEXT",
             "output_dir": "TEXT",
             "task_dir": "TEXT",
@@ -90,9 +97,10 @@ def add_history(entry: dict[str, Any]) -> int:
             """
             INSERT INTO download_history (
                 url, title, platform, format_type, resolution, audio_quality,
+                file_format, subtitles, batch_id,
                 is_playlist, playlist_items, output_dir, task_dir,
                 file_name, file_path, file_size, status, error_message
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 entry["url"],
@@ -101,6 +109,9 @@ def add_history(entry: dict[str, Any]) -> int:
                 entry["format_type"],
                 entry["resolution"],
                 entry.get("audio_quality", "192"),
+                entry.get("file_format", ""),
+                entry.get("subtitles", ""),
+                entry.get("batch_id"),
                 1 if entry.get("is_playlist") else 0,
                 entry.get("playlist_items"),
                 entry.get("output_dir"),
@@ -116,18 +127,63 @@ def add_history(entry: dict[str, Any]) -> int:
         return int(cur.lastrowid)
 
 
-def list_history(limit: int = 100) -> list[dict[str, Any]]:
-    """Return recent download history records, newest first."""
+def list_history(
+    limit: int = 100,
+    search: str | None = None,
+    status: str | None = None,
+    platform: str | None = None,
+) -> list[dict[str, Any]]:
+    """Return filtered download history records, newest first."""
+    query = "SELECT * FROM download_history WHERE 1=1"
+    params: list[Any] = []
+
+    if search:
+        s = f"%{search.strip().lower()}%"
+        query += " AND (LOWER(title) LIKE ? OR LOWER(url) LIKE ?)"
+        params.extend([s, s])
+
+    if status and status.lower() not in ("all", "semua"):
+        query += " AND LOWER(status) = ?"
+        params.append(status.strip().lower())
+
+    if platform and platform.lower() not in ("all", "semua"):
+        query += " AND LOWER(platform) = ?"
+        params.append(platform.strip().lower())
+
+    query += " ORDER BY id DESC LIMIT ?"
+    params.append(limit)
+
     with get_connection() as conn:
-        rows = conn.execute(
-            """
-            SELECT * FROM download_history
-            ORDER BY id DESC
-            LIMIT ?
-            """,
-            (limit,),
-        ).fetchall()
+        rows = conn.execute(query, tuple(params)).fetchall()
     return [dict(row) for row in rows]
+
+
+def get_history_stats() -> dict[str, Any]:
+    """Calculate aggregate statistics from download history."""
+    with get_connection() as conn:
+        total = conn.execute("SELECT COUNT(*) AS c FROM download_history").fetchone()["c"]
+        completed = conn.execute(
+            "SELECT COUNT(*) AS c FROM download_history WHERE status = 'completed'"
+        ).fetchone()["c"]
+        failed = conn.execute(
+            "SELECT COUNT(*) AS c FROM download_history WHERE status = 'failed'"
+        ).fetchone()["c"]
+        total_size = conn.execute(
+            "SELECT SUM(file_size) AS s FROM download_history WHERE status = 'completed'"
+        ).fetchone()["s"] or 0
+
+        platform_rows = conn.execute(
+            "SELECT platform, COUNT(*) as c FROM download_history GROUP BY platform ORDER BY c DESC LIMIT 6"
+        ).fetchall()
+        platforms = {row["platform"]: row["c"] for row in platform_rows}
+
+    return {
+        "total_downloads": total,
+        "completed_count": completed,
+        "failed_count": failed,
+        "total_bytes": total_size,
+        "platforms": platforms,
+    }
 
 
 def get_history_item(item_id: int) -> dict[str, Any] | None:
