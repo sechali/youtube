@@ -4,13 +4,17 @@ Menjalankan FastAPI secara mandiri di dalam sistem operasi Android
 """
 import os
 import sys
-import threading
 import uvicorn
 
-def start_server(internal_dir: str, public_download_dir: str):
-    # Set environment variables agar SQLite dan folder download mengarah ke storage Android
+def start_server(internal_dir: str, public_download_dir: str, ffmpeg_path: str = ""):
+    # Set environment variables agar SQLite, folder download, dan FFmpeg binary terbaca
     os.environ["ANDROID_INTERNAL_DIR"] = internal_dir
     os.environ["ANDROID_DOWNLOAD_DIR"] = public_download_dir
+    if ffmpeg_path and os.path.isfile(ffmpeg_path):
+        os.environ["ANDROID_FFMPEG_PATH"] = ffmpeg_path
+        # Masukkan juga direktori folder bin ke dalam PATH
+        bin_dir = os.path.dirname(ffmpeg_path)
+        os.environ["PATH"] = f"{bin_dir}:{os.environ.get('PATH', '')}"
     
     # Pastikan sys.path mencakup root folder python
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -24,7 +28,7 @@ def start_server(internal_dir: str, public_download_dir: str):
         app=app,
         host="127.0.0.1",
         port=8000,
-        log_level="info",
+        log_level="warning",
         access_log=False
     )
     server = uvicorn.Server(config)

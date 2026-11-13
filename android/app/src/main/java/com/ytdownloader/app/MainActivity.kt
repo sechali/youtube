@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.util.Log
 import android.view.View
 import android.webkit.*
 import android.widget.Toast
@@ -15,6 +16,8 @@ import androidx.appcompat.app.AppCompatActivity
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import com.ytdownloader.app.databinding.ActivityMainBinding
+import java.io.File
+import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.concurrent.thread
@@ -24,13 +27,17 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private val localServerUrl = "http://127.0.0.1:8000"
     private var sharedYoutubeUrl: String? = null
+    private var ffmpegExecutablePath: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Tangkap URL jika aplikasi dibuka via tombol "Share / Bagikan" dari YouTube
+        // 1. Ekstrak binary FFmpeg dari assets ke private internal filesDir agar bisa dieksekusi (chmod +x)
+        prepareFfmpegBinary()
+
+        // 2. Tangkap URL jika aplikasi dibuka via tombol "Share / Bagikan" dari YouTube
         handleIncomingShareIntent(intent)
 
         setupWebView()
@@ -43,6 +50,33 @@ class MainActivity : AppCompatActivity() {
         handleIncomingShareIntent(intent)
         sharedYoutubeUrl?.let { url ->
             injectSharedUrlIntoWeb(url)
+        }
+    }
+
+    private fun prepareFfmpegBinary() {
+        try {
+            val binDir = File(filesDir, "bin")
+            if (!binDir.exists()) binDir.mkdirs()
+
+            val ffmpegFile = File(binDir, "ffmpeg")
+
+            // Jika belum ada atau ukuran tidak sesuai, salin dari assets
+            if (!ffmpegFile.exists() || ffmpegFile.length() < 1000000L) {
+                assets.open("ffmpeg-arm64").use { input ->
+                    FileOutputStream(ffmpegFile).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+            }
+
+            // Beri izin execute (rwxr-xr-x)
+            ffmpegFile.setReadable(true, false)
+            ffmpegFile.setExecutable(true, false)
+
+            ffmpegExecutablePath = ffmpegFile.absolutePath
+            Log.i("YTDownloader", "FFmpeg Android siap di: $ffmpegExecutablePath (executable: ${ffmpegFile.canExecute()})")
+        } catch (e: Exception) {
+            Log.e("YTDownloader", "Gagal menyiapkan FFmpeg binary: ${e.message}", e)
         }
     }
 
@@ -119,7 +153,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun injectSharedUrlIntoWeb(url: String) {
-        // Otomatis isi kolom URL di frontend saat di-share dari YouTube
         val js = """
             (function() {
                 var input = document.getElementById('urlInput');
@@ -145,19 +178,20 @@ class MainActivity : AppCompatActivity() {
                 }
                 val py = Python.getInstance()
 
-                // 2. Beri tahu path direktori internal Android ke Python (untuk database dan download path)
+                // 2. Berikan path internal, public download, dan binary FFmpeg ke Python
                 val internalFilesDir = applicationContext.filesDir.absolutePath
                 val publicDownloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath
+                val ffmpegPath = ffmpegExecutablePath ?: ""
 
                 val launcherModule = py.getModule("android_launcher")
-                launcherModule.callAttr("start_server", internalFilesDir, publicDownloadDir)
+                launcherModule.callAttr("start_server", internalFilesDir, publicDownloadDir, ffmpegPath)
 
             } catch (e: Exception) {
                 e.printStackTrace()
             }
         }
 
-        // Polling thread untuk memeriksa apakah server FastAPI lokal sudah siap menerima request
+        // Polling thread untuk memeriksa server lokal
         thread(name = "ServerHealthCheckThread") {
             var ready = false
             var attempts = 0

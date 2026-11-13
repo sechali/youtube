@@ -37,6 +37,14 @@ _SEMAPHORE = threading.Semaphore(MAX_CONCURRENT_DOWNLOADS)
 
 def _ensure_ffmpeg_path() -> None:
     """Ensure ffmpeg is in system PATH for the current process."""
+    # 1. Periksa apakah path FFmpeg Android sudah diatur via environment variable
+    android_ffmpeg = os.environ.get("ANDROID_FFMPEG_PATH")
+    if android_ffmpeg and os.path.isfile(android_ffmpeg):
+        ffmpeg_dir = str(Path(android_ffmpeg).parent)
+        if ffmpeg_dir not in os.environ.get("PATH", ""):
+            os.environ["PATH"] = f"{ffmpeg_dir}:{os.environ.get('PATH', '')}"
+        return
+
     if shutil.which("ffmpeg"):
         return
     # Periksa lokasi standar winget jika belum masuk ke current os.environ["PATH"]
@@ -892,6 +900,11 @@ def _run_download(
         "progress_hooks": [progress_hook],
         "postprocessor_hooks": [postprocessor_hook],
     }
+    # Jika berjalan di Android, set lokasi binary ffmpeg eksplisit
+    android_ffmpeg = os.environ.get("ANDROID_FFMPEG_PATH")
+    if android_ffmpeg and os.path.isfile(android_ffmpeg):
+        ydl_opts["ffmpeg_location"] = android_ffmpeg
+
     _apply_cookie_opts(ydl_opts)
 
     if download_playlist and playlist_items:
