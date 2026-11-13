@@ -453,7 +453,18 @@
         </div>
 
         <div class="card mt-3">
-          <h3>Informasi Sistem &amp; Komponen</h3>
+          <div class="card-title-row">
+            <h3>Informasi Sistem &amp; Komponen</h3>
+            <div class="flex-row gap-2">
+              <button type="button" id="check-ytdlp-btn" class="btn btn-sm btn-secondary">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                Cek Update yt-dlp
+              </button>
+              <button type="button" id="upgrade-ytdlp-btn" class="btn btn-sm btn-primary hidden">
+                Update Sekarang
+              </button>
+            </div>
+          </div>
           <div class="system-info-grid">
             <div class="info-item">
               <span class="info-title">Status FFmpeg</span>
@@ -461,7 +472,10 @@
             </div>
             <div class="info-item">
               <span class="info-title">Versi yt-dlp</span>
-              <span class="info-val" id="sys-ytdlp">-</span>
+              <div class="flex-row gap-2" style="align-items:center;">
+                <span class="info-val" id="sys-ytdlp">-</span>
+                <span id="ytdlp-update-badge" class="badge badge-neutral hidden">Terbaru</span>
+              </div>
             </div>
             <div class="info-item">
               <span class="info-title">Sisa Ruang Disk</span>
@@ -471,6 +485,13 @@
               <span class="info-title">Lokasi FFmpeg</span>
               <span class="info-val text-mono" id="sys-ffmpeg-path">-</span>
             </div>
+          </div>
+
+          <div class="mt-3">
+            <label class="custom-checkbox">
+              <input type="checkbox" id="auto-update-ytdlp-checkbox" checked />
+              <span>Update otomatis engine <code>yt-dlp</code> di latar belakang saat aplikasi dijalankan</span>
+            </label>
           </div>
         </div>
       </section>

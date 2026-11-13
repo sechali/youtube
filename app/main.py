@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
@@ -19,6 +20,8 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     database.init_db()
+    # Cek auto-update yt-dlp di background thread saat startup jika diaktifkan
+    threading.Thread(target=downloader.auto_update_ytdlp_if_needed, daemon=True).start()
     yield
 
 
@@ -70,6 +73,10 @@ class CookieSettingsRequest(BaseModel):
 
 class OpenFileRequest(BaseModel):
     file_path: str = Field(..., min_length=1)
+
+
+class AutoUpdateRequest(BaseModel):
+    enabled: bool
 
 
 @app.get("/")
@@ -134,6 +141,31 @@ def get_dashboard_stats():
 @app.get("/api/system-status")
 def get_system_diagnostics():
     return downloader.get_system_status()
+
+
+@app.get("/api/ytdlp/check-update")
+def check_ytdlp_update():
+    return downloader.check_ytdlp_update()
+
+
+@app.post("/api/ytdlp/update")
+def trigger_ytdlp_update():
+    res = downloader.upgrade_ytdlp()
+    if not res.get("success"):
+        raise HTTPException(status_code=500, detail=res.get("error", "Gagal mengupdate yt-dlp."))
+    return res
+
+
+@app.get("/api/settings/auto-update")
+def get_auto_update_setting():
+    val = database.get_setting("auto_update_ytdlp", "true")
+    return {"enabled": val.lower() == "true"}
+
+
+@app.post("/api/settings/auto-update")
+def set_auto_update_setting(req: AutoUpdateRequest):
+    database.set_setting("auto_update_ytdlp", "true" if req.enabled else "false")
+    return {"enabled": req.enabled}
 
 
 @app.post("/api/open-folder")

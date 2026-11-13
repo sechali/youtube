@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import importlib
+import json
 import os
 import re
 import shutil
 import subprocess
 import sys
 import threading
+import urllib.request
 import uuid
 from pathlib import Path
 from typing import Any
@@ -201,6 +204,74 @@ def get_system_status() -> dict[str, Any]:
         "queued_downloads": queued_count,
         "max_concurrent": MAX_CONCURRENT_DOWNLOADS,
     }
+
+
+def check_ytdlp_update() -> dict[str, Any]:
+    """Check latest yt-dlp version available on PyPI."""
+    current = getattr(yt_dlp.version, "__version__", "unknown")
+    try:
+        req = urllib.request.Request(
+            "https://pypi.org/pypi/yt-dlp/json",
+            headers={"User-Agent": "MediaDownloaderPro/1.0"},
+        )
+        with urllib.request.urlopen(req, timeout=6) as res:
+            data = json.loads(res.read().decode("utf-8"))
+        latest = data.get("info", {}).get("version", current)
+        update_available = latest != current and latest > current
+        return {
+            "current_version": current,
+            "latest_version": latest,
+            "update_available": update_available,
+        }
+    except Exception as exc:
+        return {
+            "current_version": current,
+            "latest_version": current,
+            "update_available": False,
+            "error": str(exc),
+        }
+
+
+def upgrade_ytdlp() -> dict[str, Any]:
+    """Upgrade yt-dlp via pip inside the current virtual environment."""
+    try:
+        cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp"]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+        if res.returncode != 0:
+            return {
+                "success": False,
+                "error": res.stderr.strip() or res.stdout.strip() or "Pip upgrade gagal.",
+            }
+
+        # Reload module yt_dlp agar versi terupdate langsung aktif
+        global yt_dlp
+        importlib.reload(yt_dlp)
+        importlib.reload(yt_dlp.version)
+        new_ver = getattr(yt_dlp.version, "__version__", "unknown")
+
+        return {
+            "success": True,
+            "new_version": new_ver,
+            "output": res.stdout.strip(),
+        }
+    except Exception as exc:
+        return {
+            "success": False,
+            "error": str(exc),
+        }
+
+
+def auto_update_ytdlp_if_needed() -> None:
+    """Check and perform background upgrade if auto-update is enabled in settings."""
+    try:
+        enabled = database.get_setting("auto_update_ytdlp", "true")
+        if enabled.lower() != "true":
+            return
+        info = check_ytdlp_update()
+        if info.get("update_available"):
+            upgrade_ytdlp()
+    except Exception:
+        pass
 
 
 def _apply_cookie_opts(ydl_opts: dict[str, Any]) -> None:

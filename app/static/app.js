@@ -945,6 +945,93 @@ document.addEventListener("DOMContentLoaded", () => {
     return div.innerHTML;
   }
 
+  const checkYtdlpBtn = document.getElementById("check-ytdlp-btn");
+  const upgradeYtdlpBtn = document.getElementById("upgrade-ytdlp-btn");
+  const ytdlpUpdateBadge = document.getElementById("ytdlp-update-badge");
+  const autoUpdateYtdlpCheckbox = document.getElementById("auto-update-ytdlp-checkbox");
+
+  if (checkYtdlpBtn) {
+    checkYtdlpBtn.addEventListener("click", async () => {
+      checkYtdlpBtn.disabled = true;
+      checkYtdlpBtn.textContent = "Memeriksa...";
+      try {
+        const res = await fetch("/api/ytdlp/check-update");
+        const data = await res.json();
+        ytdlpUpdateBadge.classList.remove("hidden");
+
+        if (data.update_available) {
+          ytdlpUpdateBadge.textContent = `Tersedia: v${data.latest_version}`;
+          ytdlpUpdateBadge.className = "badge badge-info";
+          upgradeYtdlpBtn.classList.remove("hidden");
+          upgradeYtdlpBtn.textContent = `Update ke v${data.latest_version}`;
+          showToast(`Versi baru yt-dlp tersedia (v${data.latest_version})!`, "info");
+        } else {
+          ytdlpUpdateBadge.textContent = "Versi Terbaru";
+          ytdlpUpdateBadge.className = "badge badge-success";
+          upgradeYtdlpBtn.classList.add("hidden");
+          showToast(`yt-dlp sudah versi paling mutakhir (v${data.current_version}).`, "success");
+        }
+      } catch (err) {
+        showToast("Gagal memeriksa update: " + err.message, "error");
+      } finally {
+        checkYtdlpBtn.disabled = false;
+        checkYtdlpBtn.textContent = "Cek Update yt-dlp";
+      }
+    });
+  }
+
+  if (upgradeYtdlpBtn) {
+    upgradeYtdlpBtn.addEventListener("click", async () => {
+      upgradeYtdlpBtn.disabled = true;
+      upgradeYtdlpBtn.textContent = "Mengupdate...";
+      showToast("Sedang mengunduh dan mengupdate yt-dlp via pip...", "info");
+
+      try {
+        const res = await fetch("/api/ytdlp/update", { method: "POST" });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Gagal mengupdate.");
+
+        showToast(`yt-dlp berhasil diupdate ke versi ${data.new_version}!`, "success");
+        upgradeYtdlpBtn.classList.add("hidden");
+        ytdlpUpdateBadge.textContent = "Versi Terbaru";
+        ytdlpUpdateBadge.className = "badge badge-success";
+        loadSystemStatus();
+      } catch (err) {
+        showToast("Error update: " + err.message, "error");
+        upgradeYtdlpBtn.disabled = false;
+        upgradeYtdlpBtn.textContent = "Coba Update Lagi";
+      }
+    });
+  }
+
+  if (autoUpdateYtdlpCheckbox) {
+    // Load auto-update setting
+    fetch("/api/settings/auto-update")
+      .then((r) => r.json())
+      .then((d) => {
+        autoUpdateYtdlpCheckbox.checked = !!d.enabled;
+      })
+      .catch(() => {});
+
+    autoUpdateYtdlpCheckbox.addEventListener("change", async () => {
+      try {
+        await fetch("/api/settings/auto-update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled: autoUpdateYtdlpCheckbox.checked }),
+        });
+        showToast(
+          autoUpdateYtdlpCheckbox.checked
+            ? "Auto-update yt-dlp diaktifkan."
+            : "Auto-update yt-dlp dinonaktifkan.",
+          "info"
+        );
+      } catch {
+        showToast("Gagal menyimpan preferensi auto-update.", "error");
+      }
+    });
+  }
+
   // Initial load
   loadSettings();
   loadSystemStatus();
