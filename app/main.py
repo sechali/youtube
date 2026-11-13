@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import shutil
 import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -270,6 +271,51 @@ def download_task_file(task_id: str):
     if not target.is_file():
         raise HTTPException(status_code=404, detail="File tidak ditemukan.")
     return FileResponse(path=target, filename=target.name, media_type="application/octet-stream")
+
+
+@app.get("/api/tasks/{task_id}/download-stream")
+def stream_and_cleanup_task(task_id: str, background_tasks: BackgroundTasks):
+    """Stream file to client and delete file from server storage once streaming is finished."""
+    task = downloader.get_task(task_id)
+    if not task or not task.get("file_path"):
+        raise HTTPException(status_code=404, detail="File tidak ditemukan.")
+    target = Path(task["file_path"]).resolve()
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail="File fisik sudah dihapus dari server.")
+
+    def cleanup_file(p: Path):
+        try:
+            if p.is_file():
+                p.unlink(missing_ok=True)
+            # Bersihkan folder tugas playlist jika ada
+            if p.parent != downloader.get_download_dir() and (p.parent.name.startswith("playlist_") or p.parent.name.startswith("task_")):
+                shutil.rmtree(p.parent, ignore_errors=True)
+        except Exception:
+            pass
+
+    background_tasks.add_task(cleanup_file, target)
+    return FileResponse(
+        path=target,
+        filename=target.name,
+        media_type="application/octet-stream",
+    )
+
+
+@app.post("/api/settings/upload-cookies")
+async def upload_cookies_file(file: UploadFile = File(...)):
+    """Upload Netscape cookies.txt file directly via web interface (server/cloud ready)."""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="File tidak valid.")
+    save_path = downloader.DOWNLOADS_DIR / "cookies.txt"
+    with open(save_path, "wb") as f:
+        content = await file.read()
+        f.write(content)
+
+    downloader.set_cookie_settings(
+        cookie_mode="file",
+        cookie_file=str(save_path),
+    )
+    return {"success": True, "cookie_file": str(save_path)}
 
 
 @app.get("/api/history")

@@ -508,12 +508,47 @@ document.addEventListener("DOMContentLoaded", () => {
   const queueItemsContainer = document.getElementById("queue-items-container");
   const queueEmpty = document.getElementById("queue-empty");
   const activeQueueCount = document.getElementById("active-queue-count");
+  const autoStreamDeleteCheckbox = document.getElementById("auto-stream-delete-checkbox");
+  const autoDownloadedTasks = new Set();
+
+  if (autoStreamDeleteCheckbox) {
+    const savedAutoStream = localStorage.getItem("media-downloader-auto-stream") === "true";
+    autoStreamDeleteCheckbox.checked = savedAutoStream;
+    autoStreamDeleteCheckbox.addEventListener("change", () => {
+      localStorage.setItem("media-downloader-auto-stream", autoStreamDeleteCheckbox.checked ? "true" : "false");
+      showToast(
+        autoStreamDeleteCheckbox.checked
+          ? "Mode Auto-Download & Cleanup diaktifkan (Hemat storage server)."
+          : "Mode Auto-Download dinonaktifkan.",
+        "info"
+      );
+    });
+  }
+
+  function triggerAutoDownload(taskId, title) {
+    showToast(`Mengunduh "${title.slice(0, 30)}..." ke laptop & server membersihkan storage!`, "success");
+    const iframe = document.createElement("iframe");
+    iframe.style.display = "none";
+    iframe.src = `/api/tasks/${taskId}/download-stream`;
+    document.body.appendChild(iframe);
+    setTimeout(() => iframe.remove(), 60000);
+  }
 
   async function pollTasks() {
     try {
       const res = await fetch("/api/tasks");
       const data = await res.json();
       const tasks = data.tasks || [];
+
+      // Auto-download ke client & hapus dari server jika fitur aktif
+      if (autoStreamDeleteCheckbox && autoStreamDeleteCheckbox.checked) {
+        tasks.forEach((t) => {
+          if (t.status === "completed" && t.file_path && !autoDownloadedTasks.has(t.task_id)) {
+            autoDownloadedTasks.add(t.task_id);
+            triggerAutoDownload(t.task_id, t.title || "media");
+          }
+        });
+      }
 
       // Update badge
       const activeTasks = tasks.filter((t) => t.status === "downloading" || t.status === "processing" || t.status === "queued");
@@ -874,6 +909,33 @@ document.addEventListener("DOMContentLoaded", () => {
       showToast("Gagal membuka folder di explorer.", "error");
     }
   });
+
+  const cookieFileUpload = document.getElementById("cookie-file-upload");
+  const uploadCookiesBtn = document.getElementById("upload-cookies-btn");
+
+  if (uploadCookiesBtn && cookieFileUpload) {
+    uploadCookiesBtn.addEventListener("click", () => cookieFileUpload.click());
+    cookieFileUpload.addEventListener("change", async () => {
+      if (!cookieFileUpload.files || cookieFileUpload.files.length === 0) return;
+      const file = cookieFileUpload.files[0];
+      const formData = new FormData();
+      formData.append("file", file);
+      try {
+        showToast("Mengunggah file cookies.txt ke server...", "info");
+        const res = await fetch("/api/settings/upload-cookies", {
+          method: "POST",
+          body: formData,
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Gagal upload cookies.");
+        cookieFileInput.value = data.cookie_file;
+        showToast("File cookies.txt berhasil diunggah ke server!", "success");
+        loadSettings();
+      } catch (err) {
+        showToast(err.message, "error");
+      }
+    });
+  }
 
   pickCookiesBtn.addEventListener("click", async () => {
     try {

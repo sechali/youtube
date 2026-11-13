@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  ytdownloader:
+    build: .
+    container_name: media-downloader-pro
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount folder data agar database dan file cookies persisten
+      - ./history.db:/app/history.db
+      - ./downloads:/app/downloads
+    environment:
+      - TZ=Asia/Jakarta

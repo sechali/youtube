@@ -308,21 +308,42 @@ def _is_cookie_locked_error(err_str: str) -> bool:
     return "could not copy" in low or "cookie database" in low or "permission denied" in low
 
 
+def clean_media_url(url: str, as_playlist: bool = False) -> str:
+    """Strip playlist and tracking parameters if user only wants the single video."""
+    if not as_playlist and ("youtube.com/watch" in url or "youtu.be/" in url):
+        parsed = urllib.parse.urlparse(url)
+        qs = urllib.parse.parse_qs(parsed.query)
+        if "v" in qs:
+            return f"https://www.youtube.com/watch?v={qs['v'][0]}"
+    return url
+
+
 def inspect_url(url: str) -> dict[str, Any]:
     """Extract metadata, formats, and available resolutions without downloading."""
     _ensure_ffmpeg_path()
+
+    # Cek apakah URL adalah single video yang membawa parameter playlist/mix (&list=RD...)
+    parsed = urllib.parse.urlparse(url)
+    qs = urllib.parse.parse_qs(parsed.query)
+    single_video_id = qs.get("v", [None])[0]
+    is_mix_or_list = bool(single_video_id and "list" in qs)
+    clean_single_url = f"https://www.youtube.com/watch?v={single_video_id}" if single_video_id else url
+
     ydl_opts = {
         "quiet": True,
         "no_warnings": True,
         "extract_flat": "in_playlist",
         "skip_download": True,
+        "socket_timeout": 30,
+        "retries": 5,
     }
     _apply_cookie_opts(ydl_opts)
 
     info = None
+    target_inspect_url = url
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
+            info = ydl.extract_info(target_inspect_url, download=False)
     except Exception as exc:
         msg = str(exc)
         # Jika browser sedang terbuka dan mengunci database cookies, coba fallback tanpa cookies
@@ -331,7 +352,7 @@ def inspect_url(url: str) -> dict[str, Any]:
             fallback_opts.pop("cookiesfrombrowser", None)
             try:
                 with yt_dlp.YoutubeDL(fallback_opts) as ydl:
-                    info = ydl.extract_info(url, download=False)
+                    info = ydl.extract_info(target_inspect_url, download=False)
             except Exception as inner_exc:
                 inner_msg = str(inner_exc)
                 if "bot" in inner_msg.lower() or "sign in" in inner_msg.lower() or "private" in inner_msg.lower():
