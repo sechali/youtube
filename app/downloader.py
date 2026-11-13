@@ -303,6 +303,11 @@ def _format_duration(seconds: int | float | None) -> str:
     return f"{mins}:{secs:02d}"
 
 
+def _is_cookie_locked_error(err_str: str) -> bool:
+    low = err_str.lower()
+    return "could not copy" in low or "cookie database" in low or "permission denied" in low
+
+
 def inspect_url(url: str) -> dict[str, Any]:
     """Extract metadata, formats, and available resolutions without downloading."""
     _ensure_ffmpeg_path()
@@ -314,17 +319,34 @@ def inspect_url(url: str) -> dict[str, Any]:
     }
     _apply_cookie_opts(ydl_opts)
 
+    info = None
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
     except Exception as exc:
         msg = str(exc)
-        if "bot" in msg.lower() or "sign in" in msg.lower():
+        # Jika browser sedang terbuka dan mengunci database cookies, coba fallback tanpa cookies
+        if _is_cookie_locked_error(msg) and "cookiesfrombrowser" in ydl_opts:
+            fallback_opts = dict(ydl_opts)
+            fallback_opts.pop("cookiesfrombrowser", None)
+            try:
+                with yt_dlp.YoutubeDL(fallback_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+            except Exception as inner_exc:
+                inner_msg = str(inner_exc)
+                if "bot" in inner_msg.lower() or "sign in" in inner_msg.lower() or "private" in inner_msg.lower():
+                    raise ValueError(
+                        "Browser Chrome sedang terbuka dan mengunci file cookies. "
+                        "Silakan tutup sementara browser Google Chrome Anda, atau gunakan file cookies.txt di menu Pengaturan."
+                    ) from inner_exc
+                raise ValueError(f"Gagal memeriksa URL: {inner_msg}") from inner_exc
+        elif "bot" in msg.lower() or "sign in" in msg.lower():
             raise ValueError(
                 "YouTube meminta verifikasi / login. Silakan aktifkan opsi 'Autentikasi / Cookies' "
                 "dari Browser di tab Pengaturan."
             ) from exc
-        raise ValueError(f"Gagal memeriksa URL: {msg}") from exc
+        else:
+            raise ValueError(f"Gagal memeriksa URL: {msg}") from exc
 
     if not info:
         raise ValueError("Tidak dapat mengambil informasi dari URL tersebut.")
@@ -896,42 +918,61 @@ def _run_download(
         try:
             with yt_dlp.YoutubeDL(pre_opts) as pre_ydl:
                 pre_info = pre_ydl.extract_info(url, download=False)
-            if pre_info:
-                title = pre_info.get("title") or title
-                platform = pre_info.get("extractor_key") or pre_info.get("extractor") or platform
-                if download_playlist and "entries" in pre_info:
-                    raw_entries = [e for e in (pre_info.get("entries") or []) if e]
-                    queued_items = [
-                        {
-                            "index": idx + 1,
-                            "title": entry.get("title") or f"Item {idx + 1}",
-                            "status": "queued",
-                            "progress": 0.0,
-                        }
-                        for idx, entry in enumerate(raw_entries)
-                    ]
-                    _update_task(
-                        task_id,
-                        title=title,
-                        platform=platform,
-                        playlist_count=len(queued_items),
-                        items=queued_items,
-                    )
-                else:
-                    _update_task(
-                        task_id,
-                        title=title,
-                        platform=platform,
-                        items=[{"index": 1, "title": title, "status": "queued", "progress": 0.0}],
-                    )
-        except Exception:
-            pass
+        except Exception as pre_exc:
+            if _is_cookie_locked_error(str(pre_exc)) and "cookiesfrombrowser" in pre_opts:
+                try:
+                    fallback_pre = dict(pre_opts)
+                    fallback_pre.pop("cookiesfrombrowser", None)
+                    with yt_dlp.YoutubeDL(fallback_pre) as pre_ydl:
+                        pre_info = pre_ydl.extract_info(url, download=False)
+                except Exception:
+                    pass
+
+        if pre_info:
+            title = pre_info.get("title") or title
+            platform = pre_info.get("extractor_key") or pre_info.get("extractor") or platform
+            if download_playlist and "entries" in pre_info:
+                raw_entries = [e for e in (pre_info.get("entries") or []) if e]
+                queued_items = [
+                    {
+                        "index": idx + 1,
+                        "title": entry.get("title") or f"Item {idx + 1}",
+                        "status": "queued",
+                        "progress": 0.0,
+                    }
+                    for idx, entry in enumerate(raw_entries)
+                ]
+                _update_task(
+                    task_id,
+                    title=title,
+                    platform=platform,
+                    playlist_count=len(queued_items),
+                    items=queued_items,
+                )
+            else:
+                _update_task(
+                    task_id,
+                    title=title,
+                    platform=platform,
+                    items=[{"index": 1, "title": title, "status": "queued", "progress": 0.0}],
+                )
 
         if _is_cancelled(task_id):
             raise DownloadCancelledError("Unduhan dibatalkan oleh pengguna.")
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
+        info = None
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+        except Exception as exc:
+            msg = str(exc)
+            if _is_cookie_locked_error(msg) and "cookiesfrombrowser" in ydl_opts:
+                fallback_ydl_opts = dict(ydl_opts)
+                fallback_ydl_opts.pop("cookiesfrombrowser", None)
+                with yt_dlp.YoutubeDL(fallback_ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=True)
+            else:
+                raise
 
         if info:
             title = info.get("title") or title
