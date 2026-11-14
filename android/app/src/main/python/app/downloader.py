@@ -900,10 +900,17 @@ def _run_download(
         "progress_hooks": [progress_hook],
         "postprocessor_hooks": [postprocessor_hook],
     }
-    # Jika berjalan di Android, set lokasi binary ffmpeg eksplisit
+    # Jika berjalan di Android, set lokasi binary ffmpeg dan extractor-args mobile client
     android_ffmpeg = os.environ.get("ANDROID_FFMPEG_PATH")
     if android_ffmpeg and os.path.isfile(android_ffmpeg):
         ydl_opts["ffmpeg_location"] = android_ffmpeg
+        # YouTube sering memblokir web client di Android (karena ketiadaan JS runtime seperti node/deno).
+        # Gunakan extractor-args android & ios mobile client agar tidak terkena 'n challenge' atau 403 Forbidden
+        ydl_opts["extractor_args"] = {
+            "youtube": {
+                "player_client": ["android", "ios", "mweb"]
+            }
+        }
 
     _apply_cookie_opts(ydl_opts)
 

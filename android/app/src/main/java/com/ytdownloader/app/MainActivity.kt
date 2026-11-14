@@ -178,13 +178,16 @@ class MainActivity : AppCompatActivity() {
                 }
                 val py = Python.getInstance()
 
-                // 2. Berikan path internal, public download, dan binary FFmpeg ke Python
+                // 2. Berikan path internal, download directory, dan binary FFmpeg ke Python
+                // Di Android 10-14+, app tidak boleh menulis langsung ke public /storage/emulated/0/Download via raw path (W_OK permission denied).
+                // Gunakan externalFilesDir atau public Download fallback yang dijamin memiliki write permission
                 val internalFilesDir = applicationContext.filesDir.absolutePath
-                val publicDownloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath
+                val appSpecificDownloadDir = applicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.absolutePath
+                    ?: File(applicationContext.filesDir, "downloads").apply { mkdirs() }.absolutePath
                 val ffmpegPath = ffmpegExecutablePath ?: ""
 
                 val launcherModule = py.getModule("android_launcher")
-                launcherModule.callAttr("start_server", internalFilesDir, publicDownloadDir, ffmpegPath)
+                launcherModule.callAttr("start_server", internalFilesDir, appSpecificDownloadDir, ffmpegPath)
 
             } catch (e: Exception) {
                 e.printStackTrace()
