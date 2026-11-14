@@ -57,6 +57,16 @@ _ensure_ffmpeg_path()
 
 
 def get_download_dir() -> Path:
+    # 1. Jika berjalan di Android, utamakan folder publik Download HP (/storage/emulated/0/Download/YTDownloader)
+    android_download = os.environ.get("ANDROID_DOWNLOAD_DIR")
+    if android_download:
+        p = Path(android_download)
+        try:
+            p.mkdir(parents=True, exist_ok=True)
+            return p
+        except OSError:
+            pass
+
     saved = database.get_setting("download_dir")
     if saved:
         p = Path(saved)
@@ -77,7 +87,11 @@ def set_download_dir(path_str: str) -> Path:
 
 
 def pick_folder_dialog() -> str | None:
-    """Open a native folder picker dialog via a short-lived Python subprocess."""
+    """Open a native folder picker dialog via a short-lived Python subprocess (Desktop) or return download dir."""
+    if os.environ.get("ANDROID_INTERNAL_DIR") or os.environ.get("ANDROID_DOWNLOAD_DIR"):
+        # Di Android, lokasi download dikunci ke folder publik /storage/emulated/0/Download/YTDownloader
+        return str(get_download_dir())
+
     current = str(get_download_dir())
     script = (
         "import sys, tkinter as tk; from tkinter import filedialog; "
@@ -1065,6 +1079,19 @@ def _run_download(
         file_name = final_file.name if final_file and final_file.exists() else None
         file_path = str(final_file) if final_file and final_file.exists() else None
         file_size = final_file.stat().st_size if final_file and final_file.exists() else 0
+
+        # Jika di Android, pastikan file tersalin/terindeks ke folder Download publik HP
+        android_download = os.environ.get("ANDROID_DOWNLOAD_DIR")
+        if final_file and final_file.exists() and android_download:
+            try:
+                target_public_dir = Path(android_download)
+                target_public_dir.mkdir(parents=True, exist_ok=True)
+                dest_file = target_public_dir / final_file.name
+                if final_file.resolve() != dest_file.resolve():
+                    shutil.copy2(str(final_file), str(dest_file))
+                    file_path = str(dest_file)
+            except Exception:
+                pass
 
         # Trigger MediaScanner di Android agar file langsung muncul di Galeri / File Manager HP
         if file_path:
