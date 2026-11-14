@@ -1066,6 +1066,16 @@ def _run_download(
         file_path = str(final_file) if final_file and final_file.exists() else None
         file_size = final_file.stat().st_size if final_file and final_file.exists() else 0
 
+        # Trigger MediaScanner di Android agar file langsung muncul di Galeri / File Manager HP
+        if file_path:
+            try:
+                from com.chaquo.python import Python
+                current_activity = Python.getPlatform().getApplicationContext()
+                from android.media import MediaScannerConnection
+                MediaScannerConnection.scanFile(current_activity, [file_path], None, None)
+            except Exception:
+                pass
+
         database.add_history(
             {
                 "url": url,

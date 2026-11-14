@@ -8,11 +8,14 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.provider.Settings
 import android.util.Log
 import android.view.View
 import android.webkit.*
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
 import com.ytdownloader.app.databinding.ActivityMainBinding
@@ -29,10 +32,19 @@ class MainActivity : AppCompatActivity() {
     private var sharedYoutubeUrl: String? = null
     private var ffmpegExecutablePath: String? = null
 
+    private val storagePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        // Refresh check after returning from settings
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        // 0. Minta Izin Penyimpanan Lengkap agar bisa menulis langsung ke folder publik Download HP
+        requestStoragePermissionIfNeeded()
 
         // 1. Ekstrak binary FFmpeg dari assets ke private internal filesDir agar bisa dieksekusi (chmod +x)
         prepareFfmpegBinary()
@@ -50,6 +62,31 @@ class MainActivity : AppCompatActivity() {
         handleIncomingShareIntent(intent)
         sharedYoutubeUrl?.let { url ->
             injectSharedUrlIntoWeb(url)
+        }
+    }
+
+    private fun requestStoragePermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!Environment.isExternalStorageManager()) {
+                try {
+                    val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+                        data = Uri.parse("package:$packageName")
+                    }
+                    storagePermissionLauncher.launch(intent)
+                } catch (_: Exception) {
+                    val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
+                    storagePermissionLauncher.launch(intent)
+                }
+            }
+        } else {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(
+                    android.Manifest.permission.READ_EXTERNAL_STORAGE,
+                    android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+                ),
+                1001
+            )
         }
     }
 
@@ -178,16 +215,16 @@ class MainActivity : AppCompatActivity() {
                 }
                 val py = Python.getInstance()
 
-                // 2. Berikan path internal, download directory, dan binary FFmpeg ke Python
-                // Di Android 10-14+, app tidak boleh menulis langsung ke public /storage/emulated/0/Download via raw path (W_OK permission denied).
-                // Gunakan externalFilesDir atau public Download fallback yang dijamin memiliki write permission
+                // 2. Tentukan direktori penyimpanan:
+                // Gunakan folder publik Download HP (/storage/emulated/0/Download/YTDownloader)
+                val publicDownloadDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "YTDownloader").apply {
+                    mkdirs()
+                }.absolutePath
                 val internalFilesDir = applicationContext.filesDir.absolutePath
-                val appSpecificDownloadDir = applicationContext.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)?.absolutePath
-                    ?: File(applicationContext.filesDir, "downloads").apply { mkdirs() }.absolutePath
                 val ffmpegPath = ffmpegExecutablePath ?: ""
 
                 val launcherModule = py.getModule("android_launcher")
-                launcherModule.callAttr("start_server", internalFilesDir, appSpecificDownloadDir, ffmpegPath)
+                launcherModule.callAttr("start_server", internalFilesDir, publicDownloadDir, ffmpegPath)
 
             } catch (e: Exception) {
                 e.printStackTrace()
