@@ -514,16 +514,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const autoDownloadedTasks = new Set();
 
   if (autoStreamDeleteCheckbox) {
-    const savedAutoStream = localStorage.getItem("media-downloader-auto-stream") === "true";
-    autoStreamDeleteCheckbox.checked = savedAutoStream;
+    // Mode cloud hemat dinonaktifkan secara permanen agar file tidak terhapus dari HP
+    autoStreamDeleteCheckbox.checked = false;
+    localStorage.removeItem("media-downloader-auto-stream");
     autoStreamDeleteCheckbox.addEventListener("change", () => {
-      localStorage.setItem("media-downloader-auto-stream", autoStreamDeleteCheckbox.checked ? "true" : "false");
-      showToast(
-        autoStreamDeleteCheckbox.checked
-          ? "Mode Auto-Download & Cleanup diaktifkan (Hemat storage server)."
-          : "Mode Auto-Download dinonaktifkan.",
-        "info"
-      );
+      autoStreamDeleteCheckbox.checked = false;
+      showToast("Mode hemat cloud dinonaktifkan untuk menjaga file tersimpan aman di HP.", "warn");
     });
   }
 
