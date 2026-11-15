@@ -364,7 +364,16 @@ def inspect_url(url: str) -> dict[str, Any]:
         "socket_timeout": 30,
         "retries": 5,
         "ignoreerrors": True,
+        "nocheckcertificate": True,  # Bypass SSL check pada Android OpenSSL sandbox
+        "user_agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
     }
+    # Jika berjalan di Android, tambahkan player_client khusus YouTube
+    if os.environ.get("ANDROID_FFMPEG_PATH") or os.environ.get("ANDROID_INTERNAL_DIR"):
+        ydl_opts["extractor_args"] = {
+            "youtube": {
+                "player_client": ["android", "ios", "mweb"]
+            }
+        }
     _apply_cookie_opts(ydl_opts)
 
     info = None
@@ -909,6 +918,8 @@ def _run_download(
         "file_access_retries": 5,
         "extractor_retries": 5,
         "ignoreerrors": "only_download" if download_playlist else False,
+        "nocheckcertificate": True,  # Mengatasi SSL: CERTIFICATE_VERIFY_FAILED di sandbox Android untuk TikTok/IG/FB/Twitter
+        "user_agent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
         "outtmpl": str(target_dir / "%(title).80s [%(id)s].%(ext)s"),
         "windowsfilenames": True,
         "progress_hooks": [progress_hook],

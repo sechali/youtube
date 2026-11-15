@@ -16,6 +16,14 @@ def start_server(internal_dir: str, public_download_dir: str, ffmpeg_path: str =
         bin_dir = os.path.dirname(ffmpeg_path)
         os.environ["PATH"] = f"{bin_dir}:{os.environ.get('PATH', '')}"
     
+    # Pastikan SSL Certificate Authority bundle (certifi) terpasang di Android sandbox
+    try:
+        import certifi
+        os.environ["SSL_CERT_FILE"] = certifi.where()
+        os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
+    except Exception:
+        pass
+
     # Pastikan sys.path mencakup root folder python
     current_dir = os.path.dirname(os.path.abspath(__file__))
     if current_dir not in sys.path:
