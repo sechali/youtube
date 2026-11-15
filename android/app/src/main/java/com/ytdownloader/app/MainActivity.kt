@@ -92,12 +92,21 @@ class MainActivity : AppCompatActivity() {
 
     private fun prepareFfmpegBinary() {
         try {
+            // 1. Cek apakah ada di nativeLibraryDir (diextract otomatis oleh Android dari jniLibs)
+            val nativeLibDir = applicationInfo.nativeLibraryDir
+            val nativeFfmpeg = File(nativeLibDir, "libffmpeg.so")
+            if (nativeFfmpeg.exists() && nativeFfmpeg.canExecute()) {
+                ffmpegExecutablePath = nativeFfmpeg.absolutePath
+                Log.i("YTDownloader", "FFmpeg dari nativeLibraryDir siap: $ffmpegExecutablePath")
+                return
+            }
+
+            // 2. Fallback: Ekstrak dari assets ke internal filesDir/bin/ffmpeg
             val binDir = File(filesDir, "bin")
             if (!binDir.exists()) binDir.mkdirs()
 
             val ffmpegFile = File(binDir, "ffmpeg")
 
-            // Jika belum ada atau ukuran tidak sesuai, salin dari assets
             if (!ffmpegFile.exists() || ffmpegFile.length() < 1000000L) {
                 assets.open("ffmpeg-arm64").use { input ->
                     FileOutputStream(ffmpegFile).use { output ->
@@ -106,7 +115,6 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            // Beri izin execute (rwxr-xr-x)
             ffmpegFile.setReadable(true, false)
             ffmpegFile.setExecutable(true, false)
 

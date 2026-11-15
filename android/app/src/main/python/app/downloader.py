@@ -931,6 +931,9 @@ def _run_download(
     android_ffmpeg = os.environ.get("ANDROID_FFMPEG_PATH")
     if android_ffmpeg and os.path.isfile(android_ffmpeg):
         ydl_opts["ffmpeg_location"] = android_ffmpeg
+        logger.log("INFO", f"Menggunakan FFmpeg Android di: {android_ffmpeg}", "DOWNLOAD")
+    else:
+        logger.log("WARN", f"FFmpeg Android belum terdeteksi (ANDROID_FFMPEG_PATH={android_ffmpeg})", "DOWNLOAD")
         # YouTube sering memblokir web client di Android (karena ketiadaan JS runtime seperti node/deno).
         # Gunakan extractor-args android & ios mobile client agar tidak terkena 'n challenge' atau 403 Forbidden
         ydl_opts["extractor_args"] = {
@@ -969,15 +972,16 @@ def _run_download(
         # Video format
         target_ext = video_ext.lower() if video_ext.lower() in ("mp4", "mkv", "webm") else "mp4"
         if resolution == "best":
+            # Coba format single (pre-merged video+audio) terlebih dahulu (b / best) sebagai fallback jika FFmpeg tidak tersedia
             ydl_opts["format"] = (
-                f"bestvideo[ext={target_ext}]+bestaudio/bestvideo+bestaudio/best"
+                f"bestvideo[ext={target_ext}]+bestaudio/bestvideo+bestaudio/best[ext={target_ext}]/b/best"
             )
             res_label = "Terbaik"
         else:
             h = int(resolution)
             ydl_opts["format"] = (
                 f"bestvideo[height<={h}][ext={target_ext}]+bestaudio/"
-                f"bestvideo[height<={h}]+bestaudio/best[height<={h}]/best"
+                f"bestvideo[height<={h}]+bestaudio/best[height<={h}]/b[height<={h}]/best"
             )
             res_label = f"{h}p"
         ydl_opts["merge_output_format"] = target_ext
