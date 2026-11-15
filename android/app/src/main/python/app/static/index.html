@@ -73,6 +73,10 @@
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         <span>Pengaturan &amp; Info</span>
       </button>
+      <button type="button" class="tab-btn" data-tab="logs-tab">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+        <span>Log Aplikasi</span>
+      </button>
     </nav>
 
     <!-- MAIN CONTENT CONTAINERS -->
@@ -505,6 +509,35 @@
               <input type="checkbox" id="auto-update-ytdlp-checkbox" checked />
               <span>Update otomatis engine <code>yt-dlp</code> di latar belakang saat aplikasi dijalankan</span>
             </label>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 5: LOGS / DIAGNOSTICS -->
+      <section id="logs-tab" class="tab-pane">
+        <div class="card">
+          <div class="card-title-row">
+            <h2>Log Aplikasi &amp; Diagnostik</h2>
+            <div class="flex-row gap-2">
+              <button type="button" id="copy-logs-btn" class="btn btn-sm btn-primary">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                <span>Salin Semua Log</span>
+              </button>
+              <button type="button" id="refresh-logs-btn" class="btn btn-sm btn-outline">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                <span>Refresh</span>
+              </button>
+              <button type="button" id="clear-logs-btn" class="btn btn-sm btn-secondary">
+                <span>Bersihkan</span>
+              </button>
+            </div>
+          </div>
+          <p class="section-desc">
+            Catatan aktivitas dan error teknis mesin download. Jika terjadi kendala atau kegagalan unduh, klik <strong>"Salin Semua Log"</strong> untuk memudahkan penyampaian dan perbaikan.
+          </p>
+
+          <div class="log-terminal-container">
+            <pre id="log-terminal" class="log-terminal">Memuat log...</pre>
           </div>
         </div>
       </section>

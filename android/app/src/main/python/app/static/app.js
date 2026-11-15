@@ -1096,10 +1096,103 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // ========================================================================
+  // SYSTEM & APPLICATION LOGS
+  // ========================================================================
+  const logTerminal = document.getElementById("log-terminal");
+  const copyLogsBtn = document.getElementById("copy-logs-btn");
+  const refreshLogsBtn = document.getElementById("refresh-logs-btn");
+  const clearLogsBtn = document.getElementById("clear-logs-btn");
+
+  let rawLogsText = "";
+
+  async function loadLogs() {
+    if (!logTerminal) return;
+    try {
+      const res = await fetch("/api/logs?limit=300");
+      const data = await res.json();
+      const logs = data.logs || [];
+
+      if (logs.length === 0) {
+        logTerminal.innerHTML = '<span class="log-line-ts">[Belum ada catatan aktivitas]</span>';
+        rawLogsText = "";
+        return;
+      }
+
+      rawLogsText = logs.map((l) => `[${l.timestamp}] [${l.level}] [${l.category}] ${l.message}`).join("\n");
+
+      logTerminal.innerHTML = logs
+        .map((l) => {
+          let levelClass = "log-line-info";
+          if (l.level === "WARN") levelClass = "log-line-warn";
+          if (l.level === "ERROR") levelClass = "log-line-error";
+          return `<span class="log-line-ts">[${escapeHtml(l.timestamp)}]</span> <span class="${levelClass}">[${escapeHtml(l.level)}]</span> <span style="color:#94a3b8;">[${escapeHtml(l.category)}]</span> ${escapeHtml(l.message)}`;
+        })
+        .join("\n");
+
+      // Auto scroll ke paling bawah
+      const container = logTerminal.parentElement;
+      if (container) container.scrollTop = container.scrollHeight;
+    } catch (err) {
+      logTerminal.textContent = "Gagal memuat log: " + err.message;
+    }
+  }
+
+  if (copyLogsBtn) {
+    copyLogsBtn.addEventListener("click", async () => {
+      if (!rawLogsText) {
+        showToast("Tidak ada log untuk disalin.", "info");
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(rawLogsText);
+        showToast("Semua log berhasil disalin ke clipboard!", "success");
+      } catch {
+        // Fallback jika navigator.clipboard dibatasi di WebView
+        const ta = document.createElement("textarea");
+        ta.value = rawLogsText;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+        showToast("Log berhasil disalin ke clipboard!", "success");
+      }
+    });
+  }
+
+  if (refreshLogsBtn) {
+    refreshLogsBtn.addEventListener("click", () => {
+      loadLogs();
+      showToast("Log diperbarui.", "info");
+    });
+  }
+
+  if (clearLogsBtn) {
+    clearLogsBtn.addEventListener("click", async () => {
+      try {
+        await fetch("/api/logs", { method: "DELETE" });
+        showToast("Semua log dibersihkan.", "info");
+        loadLogs();
+      } catch (err) {
+        showToast("Gagal membersihkan log: " + err.message, "error");
+      }
+    });
+  }
+
+  // Refresh logs saat tab logs dibuka
+  document.querySelectorAll(".tab-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (btn.getAttribute("data-tab") === "logs-tab") {
+        loadLogs();
+      }
+    });
+  });
+
   // Initial load
   loadSettings();
   loadSystemStatus();
   loadHistory();
   loadDashboardStats();
+  loadLogs();
   pollTasks();
 });

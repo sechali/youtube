@@ -17,7 +17,7 @@ from typing import Any
 
 import yt_dlp
 
-from app import database
+from app import database, logger
 
 # Lokasi folder download: gunakan public Download Android jika tersedia
 _android_download = os.environ.get("ANDROID_DOWNLOAD_DIR")
@@ -376,12 +376,14 @@ def inspect_url(url: str) -> dict[str, Any]:
         }
     _apply_cookie_opts(ydl_opts)
 
+    logger.log("INFO", f"Inspeksi URL: {url}", "INSPECT")
     info = None
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=False)
     except Exception as exc:
         msg = str(exc)
+        logger.log("ERROR", f"Gagal inspeksi URL ({url}): {msg}", "INSPECT")
         # Jika browser sedang terbuka dan mengunci database cookies, coba fallback tanpa cookies
         if _is_cookie_locked_error(msg) and "cookiesfrombrowser" in ydl_opts:
             fallback_opts = dict(ydl_opts)
@@ -1138,6 +1140,7 @@ def _run_download(
         )
 
         _finalize_task_items(task_id, "completed")
+        logger.log("INFO", f"Unduhan sukses: '{title}' -> {file_path}", "DOWNLOAD")
         _update_task(
             task_id,
             status="completed",
@@ -1182,6 +1185,7 @@ def _run_download(
         )
     except Exception as exc:
         raw_err = str(exc)
+        logger.log("ERROR", f"Unduhan gagal ({url}): {raw_err}", "DOWNLOAD")
         if "10054" in raw_err or "forcibly closed" in raw_err.lower():
             err_msg = "Koneksi terputus dari YouTube (WinError 10054). YouTube memutus koneksi saat mengunduh batch/playlist besar. Disarankan mengunduh video satu per satu atau membatasi rentang playlist (misal: 1-5)."
         elif "timed out" in raw_err.lower():

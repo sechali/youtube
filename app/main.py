@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from app import database, downloader
+from app import database, downloader, logger
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -385,3 +385,17 @@ def download_file(file_name: str):
     if target.parent != downloader.DOWNLOADS_DIR.resolve() or not target.is_file():
         raise HTTPException(status_code=404, detail="File tidak ditemukan.")
     return FileResponse(path=target, filename=safe_name, media_type="application/octet-stream")
+
+
+@app.get("/api/logs")
+def get_system_logs(limit: int = 200):
+    """Retrieve system diagnostics and error logs."""
+    return {"logs": logger.get_logs(limit=limit)}
+
+
+@app.delete("/api/logs")
+def clear_system_logs():
+    """Clear all stored logs."""
+    logger.clear_logs()
+    return {"cleared": True}
+
