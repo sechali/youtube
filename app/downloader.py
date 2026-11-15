@@ -335,6 +335,28 @@ def _is_cookie_locked_error(err_str: str) -> bool:
     return "could not copy" in low or "cookie database" in low or "permission denied" in low
 
 
+def _is_tiktok_url(url: str) -> bool:
+    low = url.lower()
+    return "tiktok.com" in low or "douyin.com" in low
+
+
+def _fetch_tiktok_direct_info(url: str) -> dict[str, Any] | None:
+    """Fallback fetcher for TikTok using direct mobile API (tikwm) to bypass web challenge blocks."""
+    api_url = f"https://tikwm.com/api/?url={urllib.parse.quote(url)}"
+    try:
+        req = urllib.request.Request(
+            api_url,
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            if data.get("code") == 0 and data.get("data"):
+                return data["data"]
+    except Exception as e:
+        logger.log("WARN", f"TikTok direct API fallback error: {e}", "TIKTOK")
+    return None
+
+
 def clean_media_url(url: str, as_playlist: bool = False) -> str:
     """Strip playlist and tracking parameters if user only wants the single video."""
     if not as_playlist and ("youtube.com/watch" in url or "youtu.be/" in url):
@@ -384,6 +406,38 @@ def inspect_url(url: str) -> dict[str, Any]:
     except Exception as exc:
         msg = str(exc)
         logger.log("ERROR", f"Gagal inspeksi URL ({url}): {msg}", "INSPECT")
+        
+        # Coba fallback langsung untuk TikTok via direct API jika yt-dlp diblokir anti-bot TikTok
+        if _is_tiktok_url(url):
+            tt_data = _fetch_tiktok_direct_info(url)
+            if tt_data:
+                tt_title = tt_data.get("title") or "TikTok Video"
+                tt_author = (tt_data.get("author") or {}).get("nickname") or "-"
+                tt_thumb = tt_data.get("cover")
+                tt_duration = tt_data.get("duration") or 0
+                return {
+                    "url": url,
+                    "clean_single_url": url,
+                    "has_single_video": True,
+                    "title": tt_title,
+                    "platform": "TikTok",
+                    "uploader": tt_author,
+                    "duration": _format_duration(tt_duration),
+                    "thumbnail": tt_thumb,
+                    "is_playlist": False,
+                    "playlist_count": 1,
+                    "playlist_videos": [{
+                        "index": 1,
+                        "id": str(tt_data.get("id", "")),
+                        "title": tt_title,
+                        "duration": _format_duration(tt_duration),
+                        "thumbnail": tt_thumb,
+                        "url": url,
+                    }],
+                    "resolutions": [1080, 720],
+                    "subtitles_available": [],
+                }
+
         # Jika browser sedang terbuka dan mengunci database cookies, coba fallback tanpa cookies
         if _is_cookie_locked_error(msg) and "cookiesfrombrowser" in ydl_opts:
             fallback_opts = dict(ydl_opts)
@@ -408,6 +462,36 @@ def inspect_url(url: str) -> dict[str, Any]:
             raise ValueError(f"Gagal memeriksa URL: {msg}") from exc
 
     if not info:
+        # Jika info None (misalnya karena ignoreerrors=True saat TikTok diblokir challenge)
+        if _is_tiktok_url(url):
+            tt_data = _fetch_tiktok_direct_info(url)
+            if tt_data:
+                tt_title = tt_data.get("title") or "TikTok Video"
+                tt_author = (tt_data.get("author") or {}).get("nickname") or "-"
+                tt_thumb = tt_data.get("cover")
+                tt_duration = tt_data.get("duration") or 0
+                return {
+                    "url": url,
+                    "clean_single_url": url,
+                    "has_single_video": True,
+                    "title": tt_title,
+                    "platform": "TikTok",
+                    "uploader": tt_author,
+                    "duration": _format_duration(tt_duration),
+                    "thumbnail": tt_thumb,
+                    "is_playlist": False,
+                    "playlist_count": 1,
+                    "playlist_videos": [{
+                        "index": 1,
+                        "id": str(tt_data.get("id", "")),
+                        "title": tt_title,
+                        "duration": _format_duration(tt_duration),
+                        "thumbnail": tt_thumb,
+                        "url": url,
+                    }],
+                    "resolutions": [1080, 720],
+                    "subtitles_available": [],
+                }
         raise ValueError("Tidak dapat mengambil informasi dari URL tersebut.")
 
     is_playlist = info.get("_type") == "playlist" or "entries" in info or has_playlist_param
@@ -1065,6 +1149,41 @@ def _run_download(
                 fallback_ydl_opts.pop("cookiesfrombrowser", None)
                 with yt_dlp.YoutubeDL(fallback_ydl_opts) as ydl:
                     info = ydl.extract_info(url, download=True)
+            elif _is_tiktok_url(url):
+                # Fallback download TikTok langsung melalui direct stream API tanpa watermark
+                logger.log("INFO", f"Mencoba direct download fallback untuk TikTok: {url}", "TIKTOK")
+                tt_data = _fetch_tiktok_direct_info(url)
+                if not tt_data:
+                    raise
+                title = tt_data.get("title") or title
+                platform = "TikTok"
+                direct_stream_url = tt_data.get("music") if format_type == "audio" else (tt_data.get("play") or tt_data.get("wmplay"))
+                if not direct_stream_url:
+                    raise
+                
+                ext = "mp3" if format_type == "audio" else "mp4"
+                safe_title = _sanitize_filename(title)
+                dest_file_path = target_dir / f"{safe_title} [{task_id[:6]}].{ext}"
+                
+                # Unduh langsung menggunakan stream urllib dengan reporting progress
+                req = urllib.request.Request(direct_stream_url, headers={"User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(req, timeout=60) as resp, open(dest_file_path, "wb") as out_f:
+                    total_sz = int(resp.headers.get("Content-Length", 0))
+                    downloaded_sz = 0
+                    while True:
+                        if _is_cancelled(task_id):
+                            raise DownloadCancelledError("Unduhan dibatalkan oleh pengguna.")
+                        chunk = resp.read(64 * 1024)
+                        if not chunk:
+                            break
+                        out_f.write(chunk)
+                        downloaded_sz += len(chunk)
+                        if total_sz > 0:
+                            pct = round((downloaded_sz / total_sz) * 100, 1)
+                            _update_task(task_id, status="downloading", progress=pct, status_text=f"Mengunduh TikTok: {pct}%")
+                
+                downloaded_files.append(dest_file_path)
+                final_file = dest_file_path
             else:
                 raise
 
